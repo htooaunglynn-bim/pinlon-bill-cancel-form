@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>POS Bill Cancel Test</title>
+    <style>
+        body { align-items: center; background: #f6f7f9; color: #172033; display: flex; font: 16px/1.5 system-ui, sans-serif; margin: 0; min-height: 100vh; }
+        main { background: #fff; border: 1px solid #d9dee8; border-radius: 12px; box-shadow: 0 8px 24px rgb(23 32 51 / 8%); margin: 24px auto; max-width: 420px; padding: 28px; width: calc(100% - 48px); }
+        h1 { font-size: 22px; margin: 0 0 6px; }
+        p { color: #586174; font-size: 14px; margin: 0 0 24px; }
+        label { display: block; font-weight: 600; margin: 16px 0 6px; }
+        label .hint { color: #586174; font-weight: 400; }
+        input, button { box-sizing: border-box; font: inherit; width: 100%; }
+        input { border: 1px solid #b7c0d0; border-radius: 7px; padding: 10px 12px; }
+        button { background: #155eef; border: 0; border-radius: 7px; color: #fff; cursor: pointer; font-weight: 700; margin-top: 22px; padding: 11px 12px; }
+        button:disabled { cursor: wait; opacity: .65; }
+        #message { font-weight: 600; margin: 18px 0 0; min-height: 24px; }
+        #message.error { color: #b42318; }
+        #message.success { color: #067647; }
+        #message .code { display: block; font-family: ui-monospace, monospace; font-size: 13px; font-weight: 400; opacity: .8; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>POS Bill Cancel</h1>
+    <p>Calls the production bill-cancel API.</p>
+
+    <form id="bill-cancel-form">
+        <label for="pos-token">POS token</label>
+        <input id="pos-token" name="pos_token" type="password" autocomplete="off" required>
+
+        <label for="bill-id">Bill ID <span class="hint">(required — earn leg, refunded)</span></label>
+        <input id="bill-id" name="bill_id" type="text" autocomplete="off" maxlength="100" required>
+
+        <label for="redemption-id">Redemption ID <span class="hint">(optional — redeem leg, recharged)</span></label>
+        <input id="redemption-id" name="redemption_id" type="text" autocomplete="off" maxlength="100">
+
+        <label for="reason">Reason <span class="hint">(optional)</span></label>
+        <input id="reason" name="reason" type="text" autocomplete="off" maxlength="500">
+
+        <button type="submit">Cancel bill</button>
+    </form>
+
+    <p id="message" aria-live="polite"></p>
+</main>
+
+<script>
+    const endpoint = 'https://pinlon-lpms.bimats.com/api/v1/public/pos/bill/cancel';
+    const form = document.querySelector('#bill-cancel-form');
+    const message = document.querySelector('#message');
+    const submitButton = form.querySelector('button');
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        message.className = '';
+        message.textContent = 'Processing…';
+        submitButton.disabled = true;
+
+        // bill_id is required; redemption_id and reason are only sent when filled in —
+        // an empty redemption_id would be treated as a redeem reference that resolves nothing.
+        const body = new URLSearchParams({ bill_id: form.bill_id.value.trim() });
+        const redemptionId = form.redemption_id.value.trim();
+        const reason = form.reason.value.trim();
+        if (redemptionId) body.set('redemption_id', redemptionId);
+        if (reason) body.set('reason', reason);
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${form.pos_token.value}`,
+                },
+                body,
+            });
+            const payload = await response.json();
+
+            // BILL_ALREADY_CANCELLED means an earlier cancel succeeded — show it as success.
+            const alreadyCancelled = payload.error_code === 'BILL_ALREADY_CANCELLED';
+            message.className = (payload.success || alreadyCancelled) ? 'success' : 'error';
+            message.textContent = payload.message || 'The request could not be completed.';
+
+            if (payload.error_code) {
+                const code = document.createElement('span');
+                code.className = 'code';
+                code.textContent = payload.error_code;
+                message.append(code);
+            }
+        } catch {
+            message.className = 'error';
+            message.textContent = 'Unable to contact the bill-cancel API.';
+        } finally {
+            form.pos_token.value = '';
+            submitButton.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>
