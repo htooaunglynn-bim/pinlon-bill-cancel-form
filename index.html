@@ -5,20 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>POS Bill Cancel Test</title>
     <style>
-        body { align-items: center; background: #f6f7f9; color: #172033; display: flex; font: 16px/1.5 system-ui, sans-serif; margin: 0; min-height: 100vh; }
-        main { background: #fff; border: 1px solid #d9dee8; border-radius: 12px; box-shadow: 0 8px 24px rgb(23 32 51 / 8%); margin: 24px auto; max-width: 420px; padding: 28px; width: calc(100% - 48px); }
+        body { background: #f6f7f9; color: #172033; font: 16px/1.5 system-ui, sans-serif; margin: 0; min-height: 100vh; padding: 24px 0; }
+        main { background: #fff; border: 1px solid #d9dee8; border-radius: 12px; box-shadow: 0 8px 24px rgb(23 32 51 / 8%); margin: 0 auto; max-width: 420px; padding: 28px; width: calc(100% - 48px); }
         h1 { font-size: 22px; margin: 0 0 6px; }
-        p { color: #586174; font-size: 14px; margin: 0 0 24px; }
+        h2 { border-top: 1px solid #e6e9f0; font-size: 16px; margin: 28px 0 0; padding-top: 22px; }
+        p { color: #586174; font-size: 14px; margin: 0 0 16px; }
         label { display: block; font-weight: 600; margin: 16px 0 6px; }
         label .hint { color: #586174; font-weight: 400; }
         input, button { box-sizing: border-box; font: inherit; width: 100%; }
         input { border: 1px solid #b7c0d0; border-radius: 7px; padding: 10px 12px; }
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
         button { background: #155eef; border: 0; border-radius: 7px; color: #fff; cursor: pointer; font-weight: 700; margin-top: 22px; padding: 11px 12px; }
+        button.secondary { background: #344054; }
         button:disabled { cursor: wait; opacity: .65; }
-        #message { font-weight: 600; margin: 18px 0 0; min-height: 24px; }
-        #message.error { color: #b42318; }
-        #message.success { color: #067647; }
-        #message .code { display: block; font-family: ui-monospace, monospace; font-size: 13px; font-weight: 400; opacity: .8; }
+        .message { font-weight: 600; margin: 18px 0 0; min-height: 24px; }
+        .message.error { color: #b42318; }
+        .message.success { color: #067647; }
+        .message .code { display: block; font-family: ui-monospace, monospace; font-size: 13px; font-weight: 400; opacity: .8; }
+        .message .log { color: #586174; display: block; font-size: 13px; font-weight: 400; }
     </style>
 </head>
 <body>
@@ -26,10 +31,34 @@
     <h1>POS Bill Cancel</h1>
     <p>Calls the production bill-cancel API.</p>
 
-    <form id="bill-cancel-form">
-        <label for="pos-token">POS token</label>
-        <input id="pos-token" name="pos_token" type="password" autocomplete="off" required>
+    <label for="pos-token">POS token <span class="hint">(used by both forms)</span></label>
+    <input id="pos-token" type="password" autocomplete="off" required>
 
+    <h2>1. Get a bill_id / redemption_id</h2>
+
+    <form id="get-ids-form">
+        <label for="phone">Phone <span class="hint">(optional — blank registers a new customer)</span></label>
+        <input id="phone" name="phone" type="tel" autocomplete="off" placeholder="+9591234567">
+
+        <div class="row">
+            <div>
+                <label for="earn-amount">Earn amount <span class="hint">(MMK)</span></label>
+                <input id="earn-amount" name="earn_amount" type="number" min="1" value="50000">
+            </div>
+            <div>
+                <label for="redeem-points">Redeem points</label>
+                <input id="redeem-points" name="redeem_points" type="number" min="1" value="50">
+            </div>
+        </div>
+
+        <button type="submit" class="secondary">Get ID</button>
+    </form>
+
+    <p id="get-ids-message" class="message" aria-live="polite"></p>
+
+    <h2>2. Cancel the bill</h2>
+
+    <form id="bill-cancel-form">
         <label for="bill-id">Bill ID <span class="hint">(required — earn leg, refunded)</span></label>
         <input id="bill-id" name="bill_id" type="text" autocomplete="off" maxlength="100" required>
 
@@ -42,57 +71,192 @@
         <button type="submit">Cancel bill</button>
     </form>
 
-    <p id="message" aria-live="polite"></p>
+    <p id="message" class="message" aria-live="polite"></p>
 </main>
 
 <script>
-    const endpoint = 'https://pinlon-lpms.bimats.com/api/v1/public/pos/bill/cancel';
-    const form = document.querySelector('#bill-cancel-form');
-    const message = document.querySelector('#message');
-    const submitButton = form.querySelector('button');
+    const HOST = 'https://pinlon-lpms.bimats.com';
+    const OTP = '000000';   // master OTP; only accepted when APP_ENV is local/uat/testing
 
-    form.addEventListener('submit', async (event) => {
+    const tokenInput = document.querySelector('#pos-token');
+    const cancelForm = document.querySelector('#bill-cancel-form');
+    const getIdsForm = document.querySelector('#get-ids-form');
+    const cancelMessage = document.querySelector('#message');
+    const getIdsMessage = document.querySelector('#get-ids-message');
+
+    function say(el, text, state = '') {
+        el.className = `message ${state}`.trim();
+        el.textContent = text;
+    }
+
+    function detail(el, text, className = 'log') {
+        const span = document.createElement('span');
+        span.className = className;
+        span.textContent = text;
+        el.append(span);
+    }
+
+    // Every call returns the parsed body; `ok` reflects the API's own success flag, not just HTTP.
+    async function api(path, { method = 'GET', token = null, form = null } = {}) {
+        const headers = { Accept: 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const response = await fetch(`${HOST}${path}`, {
+            method,
+            headers,
+            body: form ? new URLSearchParams(form) : undefined,
+        });
+        const payload = await response.json().catch(() => ({}));
+
+        return { status: response.status, ok: payload.success === true, payload };
+    }
+
+    function fail(payload, fallback) {
+        return payload.message || payload.error_code || fallback;
+    }
+
+    // ---- Form 1: create the two legs -------------------------------------------------------
+    getIdsForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        message.className = '';
-        message.textContent = 'Processing…';
-        submitButton.disabled = true;
+        const button = getIdsForm.querySelector('button');
+        const posToken = tokenInput.value.trim();
+
+        if (!posToken) {
+            say(getIdsMessage, 'Enter the POS token first.', 'error');
+            return;
+        }
+
+        say(getIdsMessage, 'Working…');
+        button.disabled = true;
+
+        try {
+            const stamp = new Date().toISOString().replace(/\D/g, '').slice(8, 14);
+            let phone = getIdsForm.phone.value.trim();
+
+            // No phone: register a new customer under a random number, as the shell script does.
+            if (!phone) {
+                phone = `+9599${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+                const pid = `E2E-${stamp}`;
+                const register = await api('/api/v1/customer/qr/onboarding/create', {
+                    method: 'POST',
+                    // 7 fields: PID, NAME, FATHER_NAME, DOB, PHONE, GENDER(M|F), normal|baby
+                    form: { qr_string: `${pid},E2E Test Customer,U Test,1990-01-01,${phone},M,normal` },
+                });
+                if (!register.ok) throw new Error(fail(register.payload, 'Registration failed.'));
+                detail(getIdsMessage, `registered ${phone} (pid ${pid})`);
+            }
+
+            // Login. The OTP request and verify are two separate calls.
+            const otpRequest = await api('/api/v1/customer/otp/request', {
+                method: 'POST',
+                form: { phone, purpose: 'login' },
+            });
+            if (!otpRequest.ok) throw new Error(fail(otpRequest.payload, `OTP request failed for ${phone}.`));
+
+            const verify = await api('/api/v1/customer/otp/verify', {
+                method: 'POST',
+                form: { phone, code: OTP, purpose: 'login', device_name: 'bill-cancel-test-page' },
+            });
+            const customerToken = verify.payload?.data?.access_token;
+            if (!customerToken) throw new Error(fail(verify.payload, `Login failed — is ${OTP} accepted on this host?`));
+
+            // The POS scan QR is single-use, so each process call needs its own.
+            const newScanQr = async () => {
+                const scan = await api('/api/v1/customer/pos-scan', { method: 'POST', token: customerToken });
+                const qr = scan.payload?.data?.qr_string;
+                if (!qr) throw new Error(fail(scan.payload, 'No POS scan QR returned.'));
+                return qr;
+            };
+
+            // Earn leg => bill_id
+            const earn = await api('/api/v1/public/pos/points/process', {
+                method: 'POST',
+                token: posToken,
+                form: {
+                    qr_content: await newScanQr(),
+                    type: 'earn',
+                    amount: getIdsForm.earn_amount.value,
+                    reference: `E2EPOS-${stamp}`,
+                },
+            });
+            if (!earn.ok) throw new Error(fail(earn.payload, 'POS earn failed.'));
+
+            // reference_id comes back uppercased/trimmed — use the server's spelling.
+            const billId = earn.payload.data.transaction.reference_id;
+            const balance = earn.payload.data.points_balance;
+            cancelForm.bill_id.value = billId;
+            cancelForm.redemption_id.value = '';
+            detail(getIdsMessage, `bill_id = ${billId} (balance ${balance})`);
+
+            // Redeem leg => redemption_id, only when the balance covers it.
+            const redeemPoints = Number(getIdsForm.redeem_points.value);
+            if (balance >= redeemPoints) {
+                const redeem = await api('/api/v1/public/pos/points/process', {
+                    method: 'POST',
+                    token: posToken,
+                    form: {
+                        qr_content: await newScanQr(),
+                        type: 'redeem',
+                        points: redeemPoints,
+                        reference: `E2EPOSR-${stamp}`,
+                        reason: 'Paid with points',
+                    },
+                });
+                if (redeem.ok) {
+                    cancelForm.redemption_id.value = redeem.payload.data.transaction.reference_id;
+                    detail(getIdsMessage, `redemption_id = ${cancelForm.redemption_id.value}`);
+                } else {
+                    detail(getIdsMessage, `redeem leg skipped: ${fail(redeem.payload, 'failed')}`);
+                }
+            } else {
+                detail(getIdsMessage, `redeem leg skipped: balance ${balance} < ${redeemPoints}`);
+            }
+
+            // say() replaces the text, so re-render the collected log lines under the headline.
+            const lines = [...getIdsMessage.querySelectorAll('.log')].map((line) => line.textContent);
+            say(getIdsMessage, `Ready — phone ${phone}`, 'success');
+            lines.forEach((line) => detail(getIdsMessage, line));
+        } catch (error) {
+            say(getIdsMessage, error.message || 'Unable to contact the API.', 'error');
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    // ---- Form 2: cancel ---------------------------------------------------------------------
+    cancelForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = cancelForm.querySelector('button');
+        say(cancelMessage, 'Processing…');
+        button.disabled = true;
 
         // bill_id is required; redemption_id and reason are only sent when filled in —
         // an empty redemption_id would be treated as a redeem reference that resolves nothing.
-        const body = new URLSearchParams({ bill_id: form.bill_id.value.trim() });
-        const redemptionId = form.redemption_id.value.trim();
-        const reason = form.reason.value.trim();
-        if (redemptionId) body.set('redemption_id', redemptionId);
-        if (reason) body.set('reason', reason);
+        const body = { bill_id: cancelForm.bill_id.value.trim() };
+        const redemptionId = cancelForm.redemption_id.value.trim();
+        const reason = cancelForm.reason.value.trim();
+        if (redemptionId) body.redemption_id = redemptionId;
+        if (reason) body.reason = reason;
 
         try {
-            const response = await fetch(endpoint, {
+            const { payload } = await api('/api/v1/public/pos/bill/cancel', {
                 method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    Authorization: `Bearer ${form.pos_token.value}`,
-                },
-                body,
+                token: tokenInput.value.trim(),
+                form: body,
             });
-            const payload = await response.json();
 
             // BILL_ALREADY_CANCELLED means an earlier cancel succeeded — show it as success.
             const alreadyCancelled = payload.error_code === 'BILL_ALREADY_CANCELLED';
-            message.className = (payload.success || alreadyCancelled) ? 'success' : 'error';
-            message.textContent = payload.message || 'The request could not be completed.';
-
-            if (payload.error_code) {
-                const code = document.createElement('span');
-                code.className = 'code';
-                code.textContent = payload.error_code;
-                message.append(code);
-            }
+            say(
+                cancelMessage,
+                payload.message || 'The request could not be completed.',
+                (payload.success || alreadyCancelled) ? 'success' : 'error',
+            );
+            if (payload.error_code) detail(cancelMessage, payload.error_code, 'code');
         } catch {
-            message.className = 'error';
-            message.textContent = 'Unable to contact the bill-cancel API.';
+            say(cancelMessage, 'Unable to contact the bill-cancel API.', 'error');
         } finally {
-            form.pos_token.value = '';
-            submitButton.disabled = false;
+            button.disabled = false;
         }
     });
 </script>
