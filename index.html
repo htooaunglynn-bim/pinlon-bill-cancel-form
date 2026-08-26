@@ -26,11 +26,25 @@
         .message.success { color: #067647; }
         .message .code { display: block; font-family: ui-monospace, monospace; font-size: 13px; font-weight: 400; opacity: .8; }
         .message .log { color: #586174; display: block; font-size: 13px; font-weight: 400; }
-        .formula-row { align-items: flex-end; border: 1px solid #e6e9f0; border-radius: 8px; display: flex; gap: 10px; margin-top: 10px; padding: 12px; }
-        .formula-row > div { flex: 1; }
+        .formula-row { border: 1px solid #e6e9f0; border-radius: 8px; margin-top: 12px; padding: 14px; }
         .formula-row label { margin: 0 0 6px; }
-        .formula-row button { flex: 0 0 auto; margin-top: 0; width: auto; padding: 10px 14px; }
+        .formula-row .head { align-items: flex-end; display: flex; gap: 10px; }
+        .formula-row .head > div { flex: 1; }
+        .formula-row .head button { flex: 0 0 auto; margin-top: 0; padding: 10px 14px; width: auto; }
+        .formula-row .formula-field { margin-top: 12px; }
         .formula-list { margin-top: 6px; }
+        .vars { border-top: 1px dashed #e6e9f0; margin-top: 14px; padding-top: 12px; }
+        .vars > label { margin: 0 0 8px; }
+        .static-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .chip { background: #eef1f6; border-radius: 999px; color: #344054; font-family: ui-monospace, monospace; font-size: 12px; padding: 4px 10px; }
+        .chip span { color: #7b8697; font-family: system-ui, sans-serif; }
+        .variable-row { align-items: center; display: flex; gap: 8px; margin-bottom: 8px; }
+        .variable-row .eq { color: #7b8697; flex: 0 0 auto; font-weight: 700; }
+        .variable-row input { padding: 8px 10px; }
+        .variable-row .var-name { flex: 2; font-family: ui-monospace, monospace; }
+        .variable-row .var-value { flex: 1; }
+        .variable-row button { background: #eef1f6; color: #b42318; flex: 0 0 auto; margin-top: 0; padding: 8px 12px; width: auto; }
+        .add-variable { background: #eef1f6; color: #172033; font-size: 14px; margin-top: 0; padding: 8px 12px; width: auto; }
         .token-display { background: #f6f7f9; border: 1px dashed #b7c0d0; border-radius: 7px; font-family: ui-monospace, monospace; font-size: 12px; margin-top: 8px; overflow-wrap: anywhere; padding: 8px 10px; }
     </style>
 </head>
@@ -55,9 +69,15 @@
 
     <h2>Department formulas</h2>
     <p>
-        Variables available inside a formula: <code>amount</code>, <code>tier_multiplier</code>.
-        Example: <code>floor(amount * tier_multiplier / 300)</code>. Keep a <code>default</code> row &mdash;
-        it's used when no department is sent, or an unrecognized one is.
+        Write a formula the plain way, e.g. <code>amount * tier_multiplier / percent</code>.
+        Points are always rounded <strong>down</strong> automatically (1.9 &rarr; 1), so you never need to
+        round it yourself. Use <code>+ - * / ( )</code>.
+    </p>
+    <p>
+        <code>amount</code> and <code>tier_multiplier</code> are supplied by the system &mdash; every formula
+        must use <code>amount</code>, and neither can be declared or overridden. Any other name a formula uses
+        must be added with <strong>+ Add variable</strong> on that row. Keep a <code>default</code> row: it is
+        used when no department is sent, when the department is unrecognized, or when a row's formula fails.
     </p>
 
     <button type="button" class="secondary" id="load-formulas">Load current formulas</button>
@@ -128,6 +148,10 @@
     }
 
     function fail(payload, fallback) {
+        // Validation failures carry the useful detail in `errors`, not `message`.
+        const fieldErrors = Object.values(payload.errors ?? {}).flat();
+        if (fieldErrors.length) return fieldErrors.join(' ');
+
         return payload.message || payload.error_code || fallback;
     }
 
@@ -189,22 +213,74 @@
     const loadMessage = document.querySelector('#load-message');
     const saveMessage = document.querySelector('#save-message');
 
-    function addFormulaRow(department = '', formula = '') {
+    const escape = (value) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+    // Supplied by the backend at earn time; shown read-only so it's obvious they
+    // can be used in a formula but never declared here.
+    const SYSTEM_VARIABLES = [
+        ['amount', 'invoice amount'],
+        ['tier_multiplier', "customer's tier"],
+    ];
+
+    function addVariableRow(list, name = '', value = '') {
+        const variableRow = document.createElement('div');
+        variableRow.className = 'variable-row';
+        variableRow.innerHTML = `
+            <input type="text" class="var-name" value="${escape(name)}" placeholder="percent">
+            <span class="eq">=</span>
+            <input type="number" class="var-value" value="${escape(value)}" placeholder="100" step="any">
+            <button type="button" title="Remove variable">&times;</button>
+        `;
+        variableRow.querySelector('button').addEventListener('click', () => variableRow.remove());
+        list.append(variableRow);
+        return variableRow;
+    }
+
+    function addFormulaRow(department = '', formula = '', variables = {}) {
         const row = document.createElement('div');
         row.className = 'formula-row';
         row.innerHTML = `
-            <div>
-                <label>Department</label>
-                <input type="text" class="dept-name" value="${department.replace(/"/g, '&quot;')}" placeholder="default">
+            <div class="head">
+                <div>
+                    <label>Department</label>
+                    <input type="text" class="dept-name" value="${escape(department)}" placeholder="default">
+                </div>
+                <button type="button" class="danger">Remove</button>
             </div>
-            <div>
+            <div class="formula-field">
                 <label>Formula</label>
-                <input type="text" class="dept-formula" value="${formula.replace(/"/g, '&quot;')}" placeholder="floor(amount * tier_multiplier / 100)">
+                <input type="text" class="dept-formula" value="${escape(formula)}" placeholder="amount * tier_multiplier / percent">
             </div>
-            <button type="button" class="danger">Remove</button>
+            <div class="vars">
+                <label>Variables</label>
+                <div class="static-chips">
+                    ${SYSTEM_VARIABLES.map(([n, note]) => `<span class="chip">${n} <span>&mdash; ${note}</span></span>`).join('')}
+                </div>
+                <div class="variable-list"></div>
+                <button type="button" class="add-variable">+ Add variable</button>
+            </div>
         `;
-        row.querySelector('button').addEventListener('click', () => row.remove());
+
+        row.querySelector('.head .danger').addEventListener('click', () => row.remove());
+
+        const list = row.querySelector('.variable-list');
+        Object.entries(variables ?? {}).forEach(([name, value]) => addVariableRow(list, name, value));
+        row.querySelector('.add-variable').addEventListener('click', () => addVariableRow(list).querySelector('.var-name').focus());
+
         formulaList.append(row);
+        return row;
+    }
+
+    function readVariables(row) {
+        const variables = {};
+
+        row.querySelectorAll('.variable-row').forEach((variableRow) => {
+            const name = variableRow.querySelector('.var-name').value.trim();
+            const value = variableRow.querySelector('.var-value').value.trim();
+            if (name !== '' && value !== '') variables[name] = Number(value);
+        });
+
+        return variables;
     }
 
     document.querySelector('#add-formula-row').addEventListener('click', () => addFormulaRow());
@@ -223,8 +299,10 @@
 
             const departments = payload.data?.points?.department_formulas ?? [];
             formulaList.innerHTML = '';
-            departments.forEach((entry) => addFormulaRow(entry.department ?? '', entry.formula ?? ''));
-            if (departments.length === 0) addFormulaRow('default', 'floor(amount * tier_multiplier / 100)');
+            departments.forEach((entry) => addFormulaRow(entry.department ?? '', entry.formula ?? '', entry.variables ?? {}));
+            if (departments.length === 0) {
+                addFormulaRow('default', 'amount * tier_multiplier / percent', { percent: 100 });
+            }
 
             say(loadMessage, `Loaded ${departments.length} row(s).`, 'success');
         } catch (error) {
@@ -241,6 +319,7 @@
         const rows = [...formulaList.querySelectorAll('.formula-row')].map((row) => ({
             department: row.querySelector('.dept-name').value.trim(),
             formula: row.querySelector('.dept-formula').value.trim(),
+            variables: readVariables(row),
         })).filter((row) => row.department && row.formula);
 
         if (rows.length === 0) {
