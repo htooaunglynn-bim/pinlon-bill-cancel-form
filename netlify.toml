@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  environment = { NODE_VERSION = "26" }
+
+# Proxy /api requests to the backend so CORS isn't needed.
+# Requests to /api/… get forwarded to https://pinlon-lpms.bimats.com/api/… with headers intact.
+[[redirects]]
+  from = "/api/*"
+  to = "https://pinlon-lpms.bimats.com/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback not needed: the app uses HashRouter, so deep links resolve client-side.
