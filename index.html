@@ -46,6 +46,11 @@
         .variable-row button { background: #eef1f6; color: #b42318; flex: 0 0 auto; margin-top: 0; padding: 8px 12px; width: auto; }
         .add-variable { background: #eef1f6; color: #172033; font-size: 14px; margin-top: 0; padding: 8px 12px; width: auto; }
         .token-display { background: #f6f7f9; border: 1px dashed #b7c0d0; border-radius: 7px; font-family: ui-monospace, monospace; font-size: 12px; margin-top: 8px; overflow-wrap: anywhere; padding: 8px 10px; }
+        .preview-out { background: #f6f7f9; border: 1px solid #e6e9f0; border-radius: 8px; margin-top: 18px; padding: 16px; text-align: center; }
+        .preview-out .points { color: #067647; font-size: 30px; font-weight: 800; line-height: 1.2; }
+        .preview-out .points.error { color: #b42318; font-size: 15px; font-weight: 600; text-align: left; }
+        .preview-out .note { color: #7b8697; font-size: 13px; margin-top: 6px; }
+        .preview-out .note code { font-family: ui-monospace, monospace; }
     </style>
 </head>
 <body>
@@ -88,6 +93,44 @@
 
     <button type="button" id="save-formulas">Save formulas</button>
     <p id="save-message" class="message" aria-live="polite"></p>
+</main>
+
+<main id="preview-card">
+    <h1>Formula Preview</h1>
+    <p>
+        A scratchpad for trying a formula before you save it. Nothing here is sent to the server &mdash;
+        once you are happy with a formula, type it into a department row above and save.
+    </p>
+
+    <label for="preview-formula">Formula</label>
+    <input id="preview-formula" type="text" autocomplete="off" spellcheck="false"
+           value="amount * tier_multiplier / percent">
+
+    <div class="vars">
+        <label>Variables</label>
+        <div class="static-chips" id="preview-chips"></div>
+        <div class="variable-list" id="preview-variable-list"></div>
+        <button type="button" class="add-variable" id="preview-add-variable">+ Add variable</button>
+    </div>
+
+    <div class="vars">
+        <label>Test values <span class="hint">(what the system would supply at earn time)</span></label>
+        <div class="row">
+            <div>
+                <label for="preview-amount">Amount (MMK)</label>
+                <input id="preview-amount" type="number" min="0" step="any" value="50000">
+            </div>
+            <div>
+                <label for="preview-tier">Tier multiplier</label>
+                <input id="preview-tier" type="number" min="0" step="any" value="1">
+            </div>
+        </div>
+    </div>
+
+    <div class="preview-out">
+        <div class="points" id="preview-points">&mdash;</div>
+        <div class="note" id="preview-note"></div>
+    </div>
 </main>
 
 <main>
@@ -134,6 +177,8 @@
 
     let staffToken = null;
     let customerToken = null;
+    // Overwritten from GET /api/v1/staff/settings once formulas are loaded.
+    let minimumInvoiceAmount = 5000;
 
     function say(el, text, state = '') {
         el.className = `message ${state}`.trim();
@@ -175,38 +220,163 @@
         return { status: response.status, ok: payload.success === true, payload };
     }
 
-    // ---- Staff login -------------------------------------------------------------------------
-    const staffLoginForm = document.querySelector('#staff-login-form');
-    const staffLoginMessage = document.querySelector('#staff-login-message');
-    const staffTokenDisplay = document.querySelector('#staff-token-display');
+    // ---- Formula evaluator ---------------------------------------------------------------------
+    // A faithful port of app/Support/FormulaEvaluator.php, kept deliberately in step with it:
+    // same grammar, same error wording. Used only for the local preview — the server still
+    // validates on save and evaluates at earn time.
+    const FormulaEvaluator = (() => {
+        const FUNCTIONS = ['floor'];
 
-    staffLoginForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const button = staffLoginForm.querySelector('button');
-        say(staffLoginMessage, 'Logging in…');
-        button.disabled = true;
+        const isDigit = (c) => c >= '0' && c <= '9';
+        const isAlpha = (c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        const isAlnum = (c) => isAlpha(c) || isDigit(c);
+        // Matches PHP is_numeric() closely enough for the number shapes the tokenizer can build.
+        const isNumeric = (s) => s !== '' && /^\d*\.?\d+$|^\d+\.$/.test(s) === false ? /^(\d+(\.\d*)?|\.\d+)$/.test(s) : true;
 
-        try {
-            const { ok, payload } = await api('/api/v1/staff/login', {
-                method: 'POST',
-                form: {
-                    email: staffLoginForm.email.value.trim(),
-                    password: staffLoginForm.password.value,
-                    device_name: 'department-formula-test-page',
-                },
-            });
-            if (!ok) throw new Error(fail(payload, 'Staff login failed.'));
+        function tokenize(formula) {
+            const tokens = [];
+            let index = 0;
 
-            staffToken = payload.data.access_token;
-            staffTokenDisplay.hidden = false;
-            staffTokenDisplay.textContent = staffToken;
-            say(staffLoginMessage, `Logged in as ${payload.data.user?.email ?? 'staff'}.`, 'success');
-        } catch (error) {
-            say(staffLoginMessage, error.message || 'Unable to contact the API.', 'error');
-        } finally {
-            button.disabled = false;
+            while (index < formula.length) {
+                const character = formula[index];
+
+                if (/\s/.test(character)) { index++; continue; }
+
+                if ('+-*/()'.includes(character)) {
+                    tokens.push({ type: character === '(' || character === ')' ? 'paren' : 'operator', value: character });
+                    index++;
+                    continue;
+                }
+
+                if (isDigit(character) || character === '.') {
+                    let number = '';
+                    while (index < formula.length && (isDigit(formula[index]) || formula[index] === '.')) {
+                        number += formula[index];
+                        index++;
+                    }
+                    if (!isNumeric(number)) throw new Error(`Invalid number "${number}" in formula.`);
+                    tokens.push({ type: 'number', value: number });
+                    continue;
+                }
+
+                if (isAlpha(character) || character === '_') {
+                    let name = '';
+                    while (index < formula.length && (isAlnum(formula[index]) || formula[index] === '_')) {
+                        name += formula[index];
+                        index++;
+                    }
+                    tokens.push({ type: 'name', value: name });
+                    continue;
+                }
+
+                throw new Error(`Unexpected character "${character}" in formula.`);
+            }
+
+            return tokens;
         }
-    });
+
+        function evaluate(formula, variables = {}) {
+            const tokens = tokenize(formula);
+            const vars = {};
+            Object.entries(variables).forEach(([name, value]) => { vars[name] = Number(value); });
+
+            let position = 0;
+
+            const currentOperator = () => {
+                const token = tokens[position];
+                return token && token.type === 'operator' ? token.value : null;
+            };
+
+            const expectClosingParen = () => {
+                const token = tokens[position];
+                if (!token || token.value !== ')') throw new Error('Missing ")" in formula.');
+                position++;
+            };
+
+            function parseExpression() {
+                let value = parseTerm();
+                let operator;
+                while ((operator = currentOperator()) !== null && (operator === '+' || operator === '-')) {
+                    position++;
+                    const right = parseTerm();
+                    value = operator === '+' ? value + right : value - right;
+                }
+                return value;
+            }
+
+            function parseTerm() {
+                let value = parseFactor();
+                let operator;
+                while ((operator = currentOperator()) !== null && (operator === '*' || operator === '/')) {
+                    position++;
+                    const right = parseFactor();
+                    if (operator === '/') {
+                        if (right === 0) throw new Error('Division by zero in formula.');
+                        value /= right;
+                        continue;
+                    }
+                    value *= right;
+                }
+                return value;
+            }
+
+            function parseFactor() {
+                if (currentOperator() === '-') { position++; return -parseFactor(); }
+                if (currentOperator() === '+') { position++; return parseFactor(); }
+                return parsePrimary();
+            }
+
+            function parsePrimary() {
+                const token = tokens[position];
+                if (!token) throw new Error('Formula ended unexpectedly.');
+
+                if (token.type === 'number') { position++; return Number(token.value); }
+
+                if (token.type === 'paren' && token.value === '(') {
+                    position++;
+                    const value = parseExpression();
+                    expectClosingParen();
+                    return value;
+                }
+
+                if (token.type === 'name') {
+                    position++;
+                    if (FUNCTIONS.includes(token.value)) return parseFunctionCall(token.value);
+                    if (!Object.prototype.hasOwnProperty.call(vars, token.value)) {
+                        throw new Error(`Unknown variable "${token.value}" in formula.`);
+                    }
+                    return vars[token.value];
+                }
+
+                throw new Error(`Unexpected "${token.value}" in formula.`);
+            }
+
+            function parseFunctionCall(name) {
+                const token = tokens[position];
+                if (!token || token.value !== '(') throw new Error(`Expected "(" after ${name}() in formula.`);
+                position++;
+                const argument = parseExpression();
+                expectClosingParen();
+                return Math.floor(argument);
+            }
+
+            const result = parseExpression();
+
+            if (position < tokens.length) throw new Error(`Unexpected "${tokens[position].value}" in formula.`);
+
+            return result;
+        }
+
+        function identifiers(formula) {
+            const names = tokenize(formula)
+                .filter((token) => token.type === 'name' && !FUNCTIONS.includes(token.value))
+                .map((token) => token.value);
+
+            return [...new Set(names)];
+        }
+
+        return { evaluate, identifiers };
+    })();
 
     // ---- Department formula rows -------------------------------------------------------------
     const formulaList = document.querySelector('#formula-list');
@@ -221,6 +391,11 @@
         ['amount', 'invoice amount'],
         ['tier_multiplier', "customer's tier"],
     ];
+    const RESERVED = SYSTEM_VARIABLES.map(([name]) => name);
+    const VALID_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+    const systemChipsHtml = () =>
+        SYSTEM_VARIABLES.map(([n, note]) => `<span class="chip">${n} <span>&mdash; ${note}</span></span>`).join('');
 
     function addVariableRow(list, name = '', value = '') {
         const variableRow = document.createElement('div');
@@ -253,9 +428,7 @@
             </div>
             <div class="vars">
                 <label>Variables</label>
-                <div class="static-chips">
-                    ${SYSTEM_VARIABLES.map(([n, note]) => `<span class="chip">${n} <span>&mdash; ${note}</span></span>`).join('')}
-                </div>
+                <div class="static-chips">${systemChipsHtml()}</div>
                 <div class="variable-list"></div>
                 <button type="button" class="add-variable">+ Add variable</button>
             </div>
@@ -271,10 +444,10 @@
         return row;
     }
 
-    function readVariables(row) {
+    function readVariables(container) {
         const variables = {};
 
-        row.querySelectorAll('.variable-row').forEach((variableRow) => {
+        container.querySelectorAll('.variable-row').forEach((variableRow) => {
             const name = variableRow.querySelector('.var-name').value.trim();
             const value = variableRow.querySelector('.var-value').value.trim();
             if (name !== '' && value !== '') variables[name] = Number(value);
@@ -296,6 +469,13 @@
         try {
             const { ok, payload } = await api('/api/v1/staff/settings', { token: staffToken });
             if (!ok) throw new Error(fail(payload, 'Could not load settings.'));
+
+            // Keep the preview honest about the tenant's real minimum.
+            const minimum = Number(payload.data?.points?.minimum_invoice_amount);
+            if (Number.isFinite(minimum)) {
+                minimumInvoiceAmount = minimum;
+                refreshPreview();
+            }
 
             const departments = payload.data?.points?.department_formulas ?? [];
             formulaList.innerHTML = '';
@@ -342,6 +522,104 @@
             say(saveMessage, error.message || 'Unable to contact the API.', 'error');
         }
     });
+
+    // ---- Formula preview scratchpad ------------------------------------------------------------
+    const previewCard = document.querySelector('#preview-card');
+    const previewFormula = document.querySelector('#preview-formula');
+    const previewVariableList = document.querySelector('#preview-variable-list');
+    const previewAmount = document.querySelector('#preview-amount');
+    const previewTier = document.querySelector('#preview-tier');
+    const previewPoints = document.querySelector('#preview-points');
+    const previewNote = document.querySelector('#preview-note');
+
+    document.querySelector('#preview-chips').innerHTML = systemChipsHtml();
+    addVariableRow(previewVariableList, 'percent', 100);
+
+    document.querySelector('#preview-add-variable').addEventListener('click', () => {
+        addVariableRow(previewVariableList).querySelector('.var-name').focus();
+        refreshPreview();
+    });
+
+    function showPreviewError(message) {
+        previewPoints.className = 'points error';
+        previewPoints.textContent = message;
+        previewNote.textContent = '';
+    }
+
+    // Applies the same checks, in the same order, as UpdateSettingsRequest — so the preview
+    // reports the wording the save endpoint would, before anything is sent.
+    function refreshPreview() {
+        const formula = previewFormula.value.trim();
+
+        if (formula === '') {
+            previewPoints.className = 'points error';
+            previewPoints.textContent = 'Enter a formula to preview it.';
+            previewNote.textContent = '';
+            return;
+        }
+
+        const variables = readVariables(previewCard);
+
+        for (const name of Object.keys(variables)) {
+            if (RESERVED.includes(name)) {
+                showPreviewError(`The variable "${name}" is supplied by the system and cannot be redefined.`);
+                return;
+            }
+            if (!VALID_NAME.test(name)) {
+                showPreviewError(`The variable name "${name}" must start with a letter or underscore and contain only letters, numbers and underscores.`);
+                return;
+            }
+        }
+
+        const amount = Number(previewAmount.value);
+        const tierMultiplier = Number(previewTier.value);
+        const scope = { ...variables, amount, tier_multiplier: tierMultiplier };
+
+        try {
+            const unknown = FormulaEvaluator.identifiers(formula).filter((name) => !(name in scope));
+            if (unknown.length) {
+                showPreviewError(`The formula uses undefined variable(s): ${unknown.join(', ')}. Declare them under "variables".`);
+                return;
+            }
+
+            if (!FormulaEvaluator.identifiers(formula).includes('amount')) {
+                showPreviewError('The formula must use "amount".');
+                return;
+            }
+
+            // Below the minimum the backend short-circuits to 0 before touching the formula.
+            if (amount < minimumInvoiceAmount) {
+                previewPoints.className = 'points';
+                previewPoints.textContent = '0 points';
+                previewNote.textContent = `Amount is below the ${minimumInvoiceAmount.toLocaleString()} MMK minimum, so no points are earned.`;
+                return;
+            }
+
+            const raw = FormulaEvaluator.evaluate(formula, scope);
+
+            if (!Number.isFinite(raw)) {
+                showPreviewError('The formula did not produce a number.');
+                return;
+            }
+
+            const points = Math.floor(raw);
+            previewPoints.className = 'points';
+            previewPoints.textContent = `${points.toLocaleString()} point${points === 1 ? '' : 's'}`;
+            previewNote.textContent = Number.isInteger(raw)
+                ? 'Exact result — no rounding needed.'
+                : `Exact result ${raw.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}, rounded down to ${points}.`;
+        } catch (error) {
+            showPreviewError(error.message);
+        }
+    }
+
+    // Delegated so dynamically added variable rows are covered; `click` catches row removal too.
+    previewCard.addEventListener('input', refreshPreview);
+    previewCard.addEventListener('click', (event) => {
+        if (event.target.closest('button')) refreshPreview();
+    });
+
+    refreshPreview();
 
     // ---- Customer login (same OTP flow as page one) ------------------------------------------
     const customerLoginMessage = document.querySelector('#customer-login-message');
@@ -395,6 +673,39 @@
             lines.forEach((line) => detail(customerLoginMessage, line));
         } catch (error) {
             say(customerLoginMessage, error.message || 'Unable to contact the API.', 'error');
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    // ---- Staff login -------------------------------------------------------------------------
+    const staffLoginForm = document.querySelector('#staff-login-form');
+    const staffLoginMessage = document.querySelector('#staff-login-message');
+    const staffTokenDisplay = document.querySelector('#staff-token-display');
+
+    staffLoginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = staffLoginForm.querySelector('button');
+        say(staffLoginMessage, 'Logging in…');
+        button.disabled = true;
+
+        try {
+            const { ok, payload } = await api('/api/v1/staff/login', {
+                method: 'POST',
+                form: {
+                    email: staffLoginForm.email.value.trim(),
+                    password: staffLoginForm.password.value,
+                    device_name: 'department-formula-test-page',
+                },
+            });
+            if (!ok) throw new Error(fail(payload, 'Staff login failed.'));
+
+            staffToken = payload.data.access_token;
+            staffTokenDisplay.hidden = false;
+            staffTokenDisplay.textContent = staffToken;
+            say(staffLoginMessage, `Logged in as ${payload.data.user?.email ?? 'staff'}.`, 'success');
+        } catch (error) {
+            say(staffLoginMessage, error.message || 'Unable to contact the API.', 'error');
         } finally {
             button.disabled = false;
         }
