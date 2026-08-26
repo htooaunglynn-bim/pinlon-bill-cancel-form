@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* ---- Clay design tokens ------------------------------------------------------------------- */
+@theme {
+    --color-cream: #FDF4E3;
+    --color-card: #FBF1DF;
+
+    --color-lav: #C3B1F0;
+    --color-lav-deep: #9B84E3;
+    --color-pink: #F7A8C8;
+    --color-pink-deep: #E4638F;
+    --color-mint: #A9DEBA;
+    --color-mint-deep: #4E9E6C;
+    --color-sun: #F8D97A;
+
+    --color-clay-ink: #5B4636;
+    --color-clay-muted: #8A7358;
+    --color-clay-edge: #E7D9C0;
+    --color-clay-slab: #E0CBA4;
+
+    --radius-clay: 28px;
+    --radius-blob: 18px;
+
+    --font-display: "Fredoka", ui-rounded, system-ui, sans-serif;
+    --font-sans: "Nunito", ui-rounded, system-ui, sans-serif;
+}
+
+/* Raised clay: a hard offset "slab" underneath, a soft ambient shadow, and inset
+   highlight/shade so the surface reads as a pressed lump of clay rather than a flat card. */
+@utility clay-surface {
+    box-shadow:
+        0 14px 0 -4px var(--color-clay-slab),
+        0 26px 40px -14px rgb(91 70 54 / 26%),
+        inset 6px 6px 14px rgb(255 255 255 / 75%),
+        inset -8px -8px 16px rgb(91 70 54 / 8%);
+}
+
+/* Same lighting at a smaller offset; the slab collapses on :active so the button squashes. */
+@utility clay-pressable {
+    box-shadow:
+        0 8px 0 -1px rgb(91 70 54 / 18%),
+        0 12px 18px -8px rgb(91 70 54 / 35%),
+        inset 4px 4px 8px rgb(255 255 255 / 40%),
+        inset -5px -5px 10px rgb(91 70 54 / 14%);
+    transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+
+    &:hover:not(:disabled) { filter: brightness(1.04); }
+
+    &:active:not(:disabled) {
+        transform: translateY(5px);
+        box-shadow:
+            0 3px 0 -1px rgb(91 70 54 / 18%),
+            0 5px 10px -6px rgb(91 70 54 / 35%),
+            inset 4px 4px 10px rgb(91 70 54 / 18%);
+    }
+
+    &:disabled { cursor: wait; opacity: .55; }
+}
+
+/* Inverted lighting: fields look pressed *into* the clay. */
+@utility clay-inset {
+    box-shadow:
+        inset 5px 5px 10px rgb(91 70 54 / 14%),
+        inset -4px -4px 9px rgb(255 255 255 / 85%);
+}
+
+@layer base {
+    body {
+        background: var(--color-cream);
+        color: var(--color-clay-ink);
+        font-family: var(--font-sans);
+        min-height: 100vh;
+        overflow-x: hidden;
+    }
+
+    /* Numeric spinners fight the soft look and are useless on the amount fields. */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
+    input[type="number"] { appearance: textfield; }
+
+    code { font-family: ui-monospace, monospace; }
+}
+
+@keyframes clay-drift {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(14px, -22px) rotate(6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .clay-blob { animation: none !important; }
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
