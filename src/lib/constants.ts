@@ -7,6 +7,10 @@ export const SYSTEM_VARIABLES: ReadonlyArray<readonly [string, string]> = [
     ['tier_multiplier', "customer's tier"],
 ];
 
+/** Departments created in-app are locked to this formula; only the variable values are tunable. */
+export const NEW_DEPARTMENT_FORMULA = 'amount * tier_multiplier * service / percent';
+export const NEW_DEPARTMENT_VARIABLES = { percent: 100, service: 1 };
+
 export const RESERVED = SYSTEM_VARIABLES.map(([name]) => name);
 export const VALID_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 

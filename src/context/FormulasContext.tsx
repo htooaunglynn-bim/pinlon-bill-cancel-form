@@ -4,6 +4,7 @@ import { useSession } from './SessionContext';
 import { useStatus } from '@/hooks/useStatus';
 import type { Status } from '@/hooks/useStatus';
 import { api, fail } from '@/lib/api';
+import { NEW_DEPARTMENT_FORMULA, NEW_DEPARTMENT_VARIABLES } from '@/lib/constants';
 import { newRow, readVariables } from '@/lib/variables';
 import type { FormulaRowState } from '@/lib/types';
 
@@ -100,7 +101,8 @@ export function FormulasProvider({ children }: { children: ReactNode }) {
     }, [staffToken, rows, save]);
 
     const addRow = useCallback(() => {
-        const row = newRow();
+        // New departments start from the standard formula with its two tunable variables, locked.
+        const row = newRow('', NEW_DEPARTMENT_FORMULA, NEW_DEPARTMENT_VARIABLES, true);
         setRows((current) => [...current, row]);
         setDirty(true);
         return row.id;

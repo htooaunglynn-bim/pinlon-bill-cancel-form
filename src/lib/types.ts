@@ -11,6 +11,8 @@ export type FormulaRowState = DepartmentFormula & {
     id: string;
     /** Variables are kept as raw strings while editing so a half-typed value isn't coerced. */
     varRows: VariableRowState[];
+    /** Created in-app via "+ Add department": the formula and the variable names are fixed. */
+    locked?: boolean;
 };
 
 export type VariableRowState = { id: string; name: string; value: string };

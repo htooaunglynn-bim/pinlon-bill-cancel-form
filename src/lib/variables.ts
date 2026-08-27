@@ -21,8 +21,8 @@ export function readVariables(rows: VariableRowState[]): Variables {
     return variables;
 }
 
-export function newRow(department = '', formula = '', variables: Variables = {}): FormulaRowState {
-    return { id: crypto.randomUUID(), department, formula, variables, varRows: toVarRows(variables) };
+export function newRow(department = '', formula = '', variables: Variables = {}, locked = false): FormulaRowState {
+    return { id: crypto.randomUUID(), department, formula, variables, varRows: toVarRows(variables), locked };
 }
 
 export function countVariables(row: FormulaRowState): number {

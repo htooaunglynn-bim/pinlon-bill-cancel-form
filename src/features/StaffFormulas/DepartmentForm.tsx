@@ -27,6 +27,9 @@ export function DepartmentForm({ row }: { row: FormulaRowState }) {
 
     const setVarRows = (varRows: VariableRowState[]) => patchRow(row.id, { varRows });
 
+    // Rows created in-app are pinned to the standard formula: only the variable values are tunable.
+    const locked = row.locked === true;
+
     // Same checks, same order, same wording as the save endpoint — so a bad formula
     // surfaces here rather than as a failed PUT.
     const result = useMemo(
@@ -64,7 +67,12 @@ export function DepartmentForm({ row }: { row: FormulaRowState }) {
                 />
             </ClayField>
 
-            <ClayField label="Formula" htmlFor="dept-formula" className="mt-4">
+            <ClayField
+                label="Formula"
+                htmlFor="dept-formula"
+                className="mt-4"
+                hint={locked ? <>(fixed for new departments)</> : undefined}
+            >
                 <ClayInput
                     id="dept-formula"
                     mono
@@ -72,7 +80,10 @@ export function DepartmentForm({ row }: { row: FormulaRowState }) {
                     spellCheck={false}
                     placeholder="amount * tier_multiplier / percent"
                     value={row.formula}
-                    onChange={(event) => patchRow(row.id, { formula: event.target.value })}
+                    readOnly={locked}
+                    aria-readonly={locked || undefined}
+                    onChange={locked ? undefined : (event) => patchRow(row.id, { formula: event.target.value })}
+                    className={locked ? 'cursor-default bg-cream/60 text-clay-muted' : ''}
                 />
             </ClayField>
 
@@ -87,18 +98,23 @@ export function DepartmentForm({ row }: { row: FormulaRowState }) {
                         onChange={(patch) =>
                             setVarRows(row.varRows.map((item) => (item.id === variableRow.id ? { ...item, ...patch } : item)))
                         }
-                        onRemove={() => setVarRows(row.varRows.filter((item) => item.id !== variableRow.id))}
+                        onRemove={
+                            locked ? undefined : () => setVarRows(row.varRows.filter((item) => item.id !== variableRow.id))
+                        }
+                        lockName={locked}
                     />
                 ))}
 
-                <ClayButton
-                    tone="ghost"
-                    compact
-                    type="button"
-                    onClick={() => setVarRows([...row.varRows, { id: crypto.randomUUID(), name: '', value: '' }])}
-                >
-                    + Add variable
-                </ClayButton>
+                {locked ? null : (
+                    <ClayButton
+                        tone="ghost"
+                        compact
+                        type="button"
+                        onClick={() => setVarRows([...row.varRows, { id: crypto.randomUUID(), name: '', value: '' }])}
+                    >
+                        + Add variable
+                    </ClayButton>
+                )}
             </div>
 
             <div className="mt-5 border-t-2 border-dashed border-clay-edge pt-4">
