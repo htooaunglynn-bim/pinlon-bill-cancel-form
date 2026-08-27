@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { ClayButton } from '@/components/ClayButton';
@@ -6,8 +6,10 @@ import { ClayCard } from '@/components/ClayCard';
 import { ClayField } from '@/components/ClayField';
 import { ClayIcon } from '@/components/ClayIcon';
 import { ClayInput } from '@/components/ClayInput';
+import { ClaySelect } from '@/components/ClaySelect';
 import { useFormulas } from '@/context/FormulasContext';
 import { useSession } from '@/context/SessionContext';
+import { useTiers } from '@/hooks/useTiers';
 import { evaluatePreview } from '@/features/FormulaPreview/evaluatePreview';
 import { readVariables } from '@/lib/variables';
 import type { FormulaRowState, VariableRowState } from '@/lib/types';
@@ -24,6 +26,16 @@ export function DepartmentForm({ row }: { row: FormulaRowState }) {
 
     const [amount, setAmount] = useState('50000');
     const [tier, setTier] = useState('1');
+
+    // Test against the tenant's real tiers rather than a typed-in number.
+    const { tiers } = useTiers();
+    const [tierId, setTierId] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (tiers.length === 0 || tierId !== null) return;
+        setTierId(tiers[0].id);
+        setTier(String(tiers[0].multiplier));
+    }, [tiers, tierId]);
 
     const setVarRows = (varRows: VariableRowState[]) => patchRow(row.id, { varRows });
 
@@ -131,8 +143,27 @@ export function DepartmentForm({ row }: { row: FormulaRowState }) {
                             value={amount} onChange={(event) => setAmount(event.target.value)} />
                     </ClayField>
                     <ClayField label="Tier multiplier" htmlFor="dept-tier" className="flex-1">
-                        <ClayInput id="dept-tier" type="number" min="0" step="any"
-                            value={tier} onChange={(event) => setTier(event.target.value)} />
+                        {tiers.length > 0 ? (
+                            <ClaySelect
+                                id="dept-tier"
+                                value={tierId ?? ''}
+                                onChange={(event) => {
+                                    const picked = tiers.find((item) => String(item.id) === event.target.value);
+                                    if (!picked) return;
+                                    setTierId(picked.id);
+                                    setTier(String(picked.multiplier));
+                                }}
+                            >
+                                {tiers.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {item.name} &mdash; {item.multiplier}
+                                    </option>
+                                ))}
+                            </ClaySelect>
+                        ) : (
+                            <ClayInput id="dept-tier" type="number" min="0" step="any"
+                                value={tier} onChange={(event) => setTier(event.target.value)} />
+                        )}
                     </ClayField>
                 </div>
 
