@@ -18,11 +18,12 @@ function Badge({ on, children }: { on: boolean; children: React.ReactNode }) {
 /** Session status, pinned to the bottom of the sidebar. */
 export function SessionPanel() {
     const navigate = useNavigate();
-    const { staffToken, staffEmail, customerToken, signOutStaff, signOutCustomer } = useSession();
+    const { staffToken, staffEmail, customerToken, posToken, signOutStaff, signOutCustomer, signOutPos } = useSession();
 
     function signOut() {
         signOutStaff();
         signOutCustomer();
+        signOutPos();
         navigate('/');
     }
 
@@ -39,9 +40,12 @@ export function SessionPanel() {
                 <Badge on={Boolean(customerToken)}>
                     {customerToken ? 'Customer: session ready' : 'Customer: no session'}
                 </Badge>
+                <Badge on={Boolean(posToken)}>
+                    {posToken ? 'POS: token set' : 'POS: no token'}
+                </Badge>
             </div>
 
-            {staffToken || customerToken ? (
+            {staffToken || customerToken || posToken ? (
                 <ClayButton tone="ghost" type="button" onClick={signOut} className="mt-3 !py-2.5 text-sm">
                     Sign out
                 </ClayButton>

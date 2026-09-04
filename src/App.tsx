@@ -5,7 +5,9 @@ import { DashboardLayout } from './layouts/DashboardLayout';
 import { StaffLoginPage } from './pages/StaffLoginPage';
 import { FormulasPage } from './pages/FormulasPage';
 import { EarnPage } from './pages/EarnPage';
+import { BillCancelPage } from './pages/BillCancelPage';
 import { DepartmentPage } from './pages/DepartmentPage';
+import { AuditPage } from './pages/AuditPage';
 
 // HashRouter, not BrowserRouter: this app is served ad hoc (opened locally, or from a plain
 // static server) with no SPA rewrite rule, where BrowserRouter deep links would 404.
@@ -20,6 +22,8 @@ export default function App() {
                         <Route path="formulas" element={<FormulasPage />} />
                         <Route path="formulas/:id" element={<DepartmentPage />} />
                         <Route path="earn" element={<EarnPage />} />
+                        <Route path="bill-cancel" element={<BillCancelPage />} />
+                        <Route path="audit" element={<AuditPage />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>
                 </Routes>

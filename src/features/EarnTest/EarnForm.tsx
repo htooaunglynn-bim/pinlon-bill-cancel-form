@@ -32,12 +32,23 @@ export function EarnForm({ customerToken, pid, onPid }: Props) {
         setBusy(true);
 
         try {
+            const trimmedDepartment = department.trim();
+            if (trimmedDepartment.includes(',')) {
+                say('Department cannot contain a comma \u2014 it breaks the QR field count.', 'error');
+                return;
+            }
+
             const resolvedBid = bid || `E2EBID-${Date.now()}`;
             if (!bid) setBid(resolvedBid);
 
-            const trimmedDepartment = department.trim();
-            const parts = [pid.trim(), resolvedBid.trim(), amount.trim(), date.trim()];
-            if (trimmedDepartment) parts.push(trimmedDepartment);
+            // PID,BID,Department,Amount,Date — exactly 5 fields; blank department is sent as Null.
+            const parts = [
+                pid.trim(),
+                resolvedBid.trim(),
+                trimmedDepartment || 'Null',
+                amount.trim(),
+                date.trim(),
+            ];
 
             const { ok, payload } = await api('/api/v1/customer/qr/invoice/earn', {
                 method: 'POST',
@@ -100,7 +111,7 @@ export function EarnForm({ customerToken, pid, onPid }: Props) {
 
             <ClayField
                 label="Department"
-                hint={<>(optional &mdash; leave blank to use the default formula)</>}
+                hint={<>(optional &mdash; leave blank to send <code>Null</code> and use the default formula; no commas)</>}
                 htmlFor="department"
                 className="mt-4"
             >
