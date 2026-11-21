@@ -5,7 +5,7 @@ export type ApiPayload<T = unknown> = {
     success?: boolean;
     message?: string;
     error_code?: string;
-    errors?: Record<string, string[]>;
+    errors?: Record<string, string[] | number | string>;
     data?: T;
 };
 
@@ -105,4 +105,34 @@ export type RedemptionCallbackResult = {
     callback_state?: string;
     callback_attempts?: number;
     callback_failed_attempts?: number;
+};
+
+// ---- Customer (mobile app) API: /api/v1/customer ------------------------------------------
+
+export type OtpRequestResult = {
+    otp_expires_in: number;
+};
+
+export type CustomerProfile = {
+    uuid?: string;
+    member_code: string;
+    name: string;
+    phone: string | null;
+    points_balance: number | string;
+    lifetime_points?: number | string;
+    is_family_member?: boolean;
+    tier?: { name_en?: string; name?: string; points_multiplier?: number | string } | null;
+};
+
+export type OtpVerifyResult = {
+    access_token: string;
+    token_type: string;
+    customer: CustomerProfile;
+};
+
+export type PosScanQrResult = {
+    qr_image: string;
+    qr_string: string;
+    token: string;
+    expires_at: string | null;
 };

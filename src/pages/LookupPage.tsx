@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ClayButton } from '@/components/ClayButton';
 import { ClayCard } from '@/components/ClayCard';
 import { ClayChip } from '@/components/ClayChip';
@@ -53,6 +53,11 @@ export function LookupPage() {
                 <form onSubmit={submit} className="space-y-4">
                     <ClayField label="QR content" htmlFor="qr">
                         <QrInput id="qr" value={qr} onChange={setQr} placeholder="POSSCAN…PS0123…" />
+                        {!qr.trim() ? (
+                            <p className="mt-1.5 text-sm text-clay-muted">
+                                No QR? <Link to="/mobile" className="font-semibold text-lav-deep underline">Get one from the customer app →</Link>
+                            </p>
+                        ) : null}
                         {qr.trim() && !parsed ? <FieldWarning>This doesn't look like a POSSCAN customer QR. The server will probably reject it.</FieldWarning> : null}
                         {parsed?.legacy ? <FieldWarning>Legacy QR format. Still accepted, but ask the customer to update the app.</FieldWarning> : null}
                     </ClayField>

@@ -113,7 +113,11 @@ export function PointsPage() {
                         <QrInput id="qr" value={qr} onChange={setQr} placeholder="POSSCAN…" invalid={!!show('qr')} />
                         <FieldError>{show('qr')}</FieldError>
                         <p className="mt-1.5 text-sm text-clay-muted">
-                            Not sure who it is? <Link to={`/terminal/lookup?qr=${encodeURIComponent(qr)}`} className="font-semibold text-lav-deep underline">Look up first</Link>.
+                            {qr.trim() ? (
+                                <>Not sure who it is? <Link to={`/terminal/lookup?qr=${encodeURIComponent(qr)}`} className="font-semibold text-lav-deep underline">Look up first</Link>.</>
+                            ) : (
+                                <>No QR? <Link to="/mobile" className="font-semibold text-lav-deep underline">Get one from the customer app →</Link></>
+                            )}
                         </p>
                     </ClayField>
 
