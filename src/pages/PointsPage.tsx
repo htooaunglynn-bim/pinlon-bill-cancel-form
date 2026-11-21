@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { ActiveQrBanner } from '@/components/ActiveQrBanner';
 import { ClayButton } from '@/components/ClayButton';
 import { ClayCard } from '@/components/ClayCard';
 import { ClayField } from '@/components/ClayField';
@@ -10,6 +11,7 @@ import { StatusMessage } from '@/components/StatusMessage';
 import { FieldError, JsonBlock, KeyValue, PageHeader, Segmented, Stat } from '@/components/ui';
 import { useTenant } from '@/context/TenantContext';
 import { usePosCall } from '@/hooks/usePosCall';
+import { useSharedQrField } from '@/hooks/useSharedQrField';
 import { posApi } from '@/lib/api';
 import { formatMmk, formatPoints, whenText } from '@/lib/dates';
 import { usePrefs } from '@/lib/prefs';
@@ -24,7 +26,7 @@ export function PointsPage() {
     const prefs = usePrefs();
     const [params] = useSearchParams();
     const [type, setType] = useState<Type>(params.get('type') === 'redeem' ? 'redeem' : 'earn');
-    const [qr, setQr] = useState(params.get('qr') ?? '');
+    const { qr, setQr, expired: qrExpired, markUsed } = useSharedQrField(params.get('qr'));
     const [amount, setAmount] = useState(params.get('amount') ?? '');
     const [points, setPoints] = useState('');
     const [reference, setReference] = useState(params.get('reference') ?? newBid());
@@ -69,7 +71,7 @@ export function PointsPage() {
             (d) => (type === 'earn' ? `Earned ${formatPoints(d.transaction.point_earn)} points.` : `Redeemed ${formatPoints(d.transaction.point_deducted)} points.`) + ` New balance: ${formatPoints(d.points_balance)}.`,
         );
         // The customer QR is used up by a successful earn/redeem.
-        if (result.ok) setQr('');
+        if (result.ok) markUsed();
     }
 
     function nextBill() {
@@ -110,6 +112,7 @@ export function PointsPage() {
             >
                 <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2" noValidate>
                     <ClayField label="Customer QR" htmlFor="qr" className="sm:col-span-2">
+                        <ActiveQrBanner value={qr} onUse={setQr} onDismiss={() => setQr('')} expired={qrExpired} />
                         <QrInput id="qr" value={qr} onChange={setQr} placeholder="POSSCAN…" invalid={!!show('qr')} />
                         <FieldError>{show('qr')}</FieldError>
                         <p className="mt-1.5 text-sm text-clay-muted">

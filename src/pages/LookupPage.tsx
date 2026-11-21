@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ActiveQrBanner } from '@/components/ActiveQrBanner';
 import { ClayButton } from '@/components/ClayButton';
 import { ClayCard } from '@/components/ClayCard';
 import { ClayChip } from '@/components/ClayChip';
@@ -10,6 +11,7 @@ import { StatusMessage } from '@/components/StatusMessage';
 import { FieldWarning, JsonBlock, KeyValue, PageHeader, Stat } from '@/components/ui';
 import { useTenant } from '@/context/TenantContext';
 import { usePosCall } from '@/hooks/usePosCall';
+import { useSharedQrField } from '@/hooks/useSharedQrField';
 import { posApi } from '@/lib/api';
 import { formatPoints, whenText } from '@/lib/dates';
 import { parsePosScanQr } from '@/lib/qr/scan';
@@ -19,13 +21,12 @@ export function LookupPage() {
     const { tenant } = useTenant();
     const navigate = useNavigate();
     const [params] = useSearchParams();
-    const [qr, setQr] = useState(params.get('qr') ?? '');
+    const { qr, setQr, expired, isShared } = useSharedQrField(params.get('qr'));
     const [amount, setAmount] = useState('');
     const call = usePosCall<CustomerLookup>();
     const parsed = qr.trim() ? parsePosScanQr(qr) : null;
 
-    async function submit(e: FormEvent) {
-        e.preventDefault();
+    async function lookup() {
         await call.run(
             () => posApi<CustomerLookup>(tenant, '/customers/lookup', {
                 query: { qr_content: qr.trim() },
@@ -34,6 +35,20 @@ export function LookupPage() {
             (d) => `Found ${d.name} (${d.member_code}).`,
         );
     }
+
+    function submit(e: FormEvent) {
+        e.preventDefault();
+        void lookup();
+    }
+
+    // The QR generated on the Mobile page needs no button press: look it up as soon as it
+    // lands in the field. Lookups don't use up the scan token. Once per QR value.
+    const autoLooked = useRef<string | null>(null);
+    useEffect(() => {
+        if (!isShared || call.busy || autoLooked.current === qr) return;
+        autoLooked.current = qr;
+        void lookup();
+    }, [isShared, qr]);
 
     const c = call.data;
     const multiplier = c?.tier?.points_multiplier ?? 0;
@@ -51,6 +66,7 @@ export function LookupPage() {
                 intro={<p>The QR comes from <strong>Pay at POS</strong> in the Pinlon app. It is valid for 5 minutes and is used up by the first earn or redeem. Lookups don't use it up.</p>}
             >
                 <form onSubmit={submit} className="space-y-4">
+                    <ActiveQrBanner value={qr} onUse={setQr} onDismiss={() => setQr('')} expired={expired} />
                     <ClayField label="QR content" htmlFor="qr">
                         <QrInput id="qr" value={qr} onChange={setQr} placeholder="POSSCAN…PS0123…" />
                         {!qr.trim() ? (

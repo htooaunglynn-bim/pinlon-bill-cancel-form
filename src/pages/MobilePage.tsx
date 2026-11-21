@@ -249,12 +249,17 @@ function CodeStep({ phone, initialExpiresAt, onBack }: { phone: string; initialE
 
 function QrStep({ onSignedOut }: { onSignedOut: () => void }) {
     const { tenant } = useTenant();
-    const { session, signOut, forget, updateProfile } = useCustomerSession();
+    const { session, signOut, forget, updateProfile, activeQr, setActiveQr } = useCustomerSession();
     const gen = usePosCall<PosScanQrResult>('customer');
-    const [qr, setQr] = useState<PosScanQrResult | null>(null);
+    // Coming back to this page while a QR is still live shows it again, countdown and all.
+    const [qr, setQr] = useState<PosScanQrResult | null>(() =>
+        activeQr ? { qr_string: activeQr.qr, expires_at: activeQr.expiresAt, qr_image: '', token: '' } : null,
+    );
     const expiresAtMs = qr?.expires_at ? new Date(qr.expires_at).getTime() : null;
     const left = useCountdown(expiresAtMs);
-    const expired = !!qr && expiresAtMs !== null && left === 0;
+    const expired = !!qr && expiresAtMs !== null && left <= 1;
+    // The shared QR is cleared after a successful earn/redeem: the token is spent.
+    const used = !!qr && !expired && activeQr?.qr !== qr.qr_string;
 
     // Refresh the profile (points balance) when the step opens.
     useEffect(() => {
@@ -282,8 +287,17 @@ function QrStep({ onSignedOut }: { onSignedOut: () => void }) {
             }),
             () => 'POS QR ready. Valid for 5 minutes, single use.',
         );
-        if (result.ok && result.payload.data) setQr(result.payload.data);
-        else if (result.status === 401) forget();
+        const data = result.payload.data;
+        if (result.ok && data) {
+            setQr(data);
+            // Share it with the terminal pages until it expires or is used.
+            setActiveQr({
+                qr: data.qr_string,
+                expiresAt: data.expires_at ?? new Date(Date.now() + 5 * 60_000).toISOString(),
+                name: c.name,
+                memberCode: c.member_code,
+            });
+        } else if (result.status === 401) forget();
     }
 
     const q = qr ? encodeURIComponent(qr.qr_string) : '';
@@ -334,15 +348,22 @@ function QrStep({ onSignedOut }: { onSignedOut: () => void }) {
                         </div>
                         {expired ? (
                             <p className="text-center font-display font-semibold text-pink-deep">This QR has expired. Generate a new one.</p>
+                        ) : used ? (
+                            <p className="text-center font-display font-semibold text-clay-muted">This QR was used for an earn or redeem. Generate a new one.</p>
                         ) : (
+                            <>
+                            <p className="clay-inset rounded-blob bg-mint/25 px-4 py-2.5 text-center text-sm">
+                                <strong>Ready on the POS terminal pages</strong> until it expires. No need to copy.
+                            </p>
                             <div className="grid gap-2.5 sm:grid-cols-3">
                                 <Link to={`/terminal/lookup?qr=${q}`} className="clay-pressable rounded-blob bg-lav px-3 py-2.5 text-center font-display text-sm font-semibold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-lav-deep">Look up</Link>
                                 <Link to={`/terminal/points?type=earn&qr=${q}`} className="clay-pressable rounded-blob bg-mint px-3 py-2.5 text-center font-display text-sm font-semibold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-lav-deep">Earn</Link>
                                 <Link to={`/terminal/points?type=redeem&qr=${q}`} className="clay-pressable rounded-blob bg-sun px-3 py-2.5 text-center font-display text-sm font-semibold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-lav-deep">Redeem</Link>
                             </div>
+                            </>
                         )}
-                        <ClayButton tone={expired ? 'primary' : 'ghost'} type="button" onClick={() => void generate()} disabled={gen.busy}>
-                            {gen.busy ? 'Generating…' : expired ? 'Generate new QR' : 'Replace with a new QR'}
+                        <ClayButton tone={expired || used ? 'primary' : 'ghost'} type="button" onClick={() => void generate()} disabled={gen.busy}>
+                            {gen.busy ? 'Generating…' : expired || used ? 'Generate new QR' : 'Replace with a new QR'}
                         </ClayButton>
                     </div>
                 )}

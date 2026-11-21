@@ -1,5 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveQr } from '@/context/CustomerSessionContext';
+import { mmss } from '@/hooks/useCountdown';
 import { useTenant } from '@/context/TenantContext';
 import { NAV } from '@/lib/nav';
 import { ClayButton } from './ClayButton';
@@ -46,7 +48,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                                         }
                                     >
                                         <ClayIcon name={item.icon} size={24} />
-                                        <span>{item.label}</span>
+                                        <span className="flex-1">{item.label}</span>
+                                        {item.to === '/mobile' ? <LiveQrBadge /> : null}
                                     </NavLink>
                                 </li>
                             ))}
@@ -87,5 +90,18 @@ function SessionPanel() {
                 Sign out
             </ClayButton>
         </div>
+    );
+}
+
+/** Countdown next to "Customer app" while a generated POS QR is live. */
+function LiveQrBadge() {
+    const { activeQr, secondsLeft } = useActiveQr();
+    if (!activeQr) return null;
+    return (
+        <span className="flex items-center gap-1.5 font-mono text-xs text-mint-deep" title={`POS QR for ${activeQr.name} is live`}>
+            <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-mint-deep" />
+            {mmss(secondsLeft)}
+            <span className="sr-only"> left on the customer POS QR</span>
+        </span>
     );
 }
