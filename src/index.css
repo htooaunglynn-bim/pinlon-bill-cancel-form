@@ -54,7 +54,7 @@
             inset 4px 4px 10px rgb(91 70 54 / 18%);
     }
 
-    &:disabled { cursor: wait; opacity: .55; }
+    &:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 /* Inverted lighting: fields look pressed *into* the clay. */
@@ -89,4 +89,46 @@
 @media (prefers-reduced-motion: reduce) {
     .clay-blob { animation: none !important; }
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ---- POS admin additions ------------------------------------------------------------------ */
+
+@utility clay-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 8px;
+
+    & th {
+        text-align: left;
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--color-clay-muted);
+        padding: 0 12px;
+    }
+
+    & td {
+        background: var(--color-cream);
+        padding: 10px 12px;
+        font-size: 14px;
+        vertical-align: top;
+    }
+
+    & td:first-child { border-radius: 14px 0 0 14px; }
+    & td:last-child { border-radius: 0 14px 14px 0; }
+}
+
+/* Print: only the element marked .print-area is printed. Receipts print at 80mm, label sheets at A4. */
+@media print {
+    @page { margin: 8mm; }
+
+    body { background: #fff !important; }
+    body * { visibility: hidden; }
+    .print-area, .print-area * { visibility: visible; }
+    .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; }
+    .print-hide { display: none !important; }
+
+    .print-receipt { width: 72mm; color: #000; font-family: ui-monospace, monospace; font-size: 11px; }
+    .print-grid { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+    .print-grid > * { break-inside: avoid; border: 1px dashed #999; border-radius: 4mm; padding: 3mm; box-shadow: none !important; background: #fff !important; }
 }
