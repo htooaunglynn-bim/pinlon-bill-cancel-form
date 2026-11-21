@@ -1,34 +1,44 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { SessionProvider } from './context/SessionContext';
-import { FormulasProvider } from './context/FormulasContext';
-import { DashboardLayout } from './layouts/DashboardLayout';
-import { StaffLoginPage } from './pages/StaffLoginPage';
-import { FormulasPage } from './pages/FormulasPage';
-import { EarnPage } from './pages/EarnPage';
-import { BillCancelPage } from './pages/BillCancelPage';
-import { DepartmentPage } from './pages/DepartmentPage';
-import { AuditPage } from './pages/AuditPage';
+import { configErrors } from '@/config/env';
+import { AuthProvider } from '@/context/AuthContext';
+import { TenantProvider } from '@/context/TenantContext';
+import { DashboardLayout } from '@/layouts/DashboardLayout';
+import { BillCancelPage } from '@/pages/BillCancelPage';
+import { ConfigMissingPage } from '@/pages/ConfigMissingPage';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { InvoicePage } from '@/pages/InvoicePage';
+import { LoginPage } from '@/pages/LoginPage';
+import { LookupPage } from '@/pages/LookupPage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
+import { OverviewPage } from '@/pages/OverviewPage';
+import { PointsPage } from '@/pages/PointsPage';
+import { RedemptionsPage } from '@/pages/RedemptionsPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 
-// HashRouter, not BrowserRouter: this app is served ad hoc (opened locally, or from a plain
-// static server) with no SPA rewrite rule, where BrowserRouter deep links would 404.
 export default function App() {
+    if (configErrors.length) return <ConfigMissingPage errors={configErrors} />;
+
     return (
         <HashRouter>
-            <SessionProvider>
-              <FormulasProvider>
-                <Routes>
-                    <Route element={<DashboardLayout />}>
-                        <Route index element={<StaffLoginPage />} />
-                        <Route path="formulas" element={<FormulasPage />} />
-                        <Route path="formulas/:id" element={<DepartmentPage />} />
-                        <Route path="earn" element={<EarnPage />} />
-                        <Route path="bill-cancel" element={<BillCancelPage />} />
-                        <Route path="audit" element={<AuditPage />} />
+            <AuthProvider>
+                <TenantProvider>
+                    <Routes>
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route element={<DashboardLayout />}>
+                            <Route index element={<OverviewPage />} />
+                            <Route path="onboarding" element={<OnboardingPage />} />
+                            <Route path="invoice" element={<InvoicePage />} />
+                            <Route path="terminal/lookup" element={<LookupPage />} />
+                            <Route path="terminal/points" element={<PointsPage />} />
+                            <Route path="terminal/bill-cancel" element={<BillCancelPage />} />
+                            <Route path="terminal/redemptions" element={<RedemptionsPage />} />
+                            <Route path="history" element={<HistoryPage />} />
+                            <Route path="settings" element={<SettingsPage />} />
+                        </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
-                    </Route>
-                </Routes>
-              </FormulasProvider>
-            </SessionProvider>
+                    </Routes>
+                </TenantProvider>
+            </AuthProvider>
         </HashRouter>
     );
 }

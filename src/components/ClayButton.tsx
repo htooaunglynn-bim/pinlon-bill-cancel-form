@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ComponentProps } from 'react';
 
 type Tone = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -9,7 +9,7 @@ const TONES: Record<Tone, string> = {
     danger:    'bg-pink text-clay-ink',
 };
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
+type Props = ComponentProps<'button'> & {
     tone?: Tone;
     /** Small inline button (row actions) instead of the full-width default. */
     compact?: boolean;

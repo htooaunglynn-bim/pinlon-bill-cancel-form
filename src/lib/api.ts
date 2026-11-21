@@ -1,40 +1,63 @@
+import { config, type Tenant } from '@/config/env';
+import { addHistory, type HistoryKind } from './history';
+import { withQuery, type QueryParams } from './query';
 import type { ApiPayload, ApiResult } from './types';
 
-// Empty in dev so requests hit the Vite proxy (see vite.config.ts) and dodge CORS;
-// a production build sets VITE_API_BASE to the full host.
-const HOST = import.meta.env.VITE_API_BASE ?? '';
+const BASE = '/api/v1/public/pos';
 
-export function fail(payload: ApiPayload, fallback: string): string {
-    // Validation failures carry the useful detail in `errors`, not `message`.
-    const fieldErrors = Object.values(payload.errors ?? {}).flat();
-    if (fieldErrors.length) return fieldErrors.join(' ');
-
-    return payload.message || payload.error_code || fallback;
-}
-
-type ApiOptions = {
-    method?: string;
-    token?: string | null;
-    form?: Record<string, string> | null;
-    json?: unknown;
+type PosOptions = {
+    method?: 'GET' | 'POST';
+    query?: QueryParams;
+    json?: Record<string, unknown>;
+    /** When set, the call is written to activity history. */
+    log?: { kind: HistoryKind; summary: string; meta?: Record<string, string> };
 };
 
-// `json` sends an application/json body (needed for the nested department_formulas
-// array); `form` keeps the original x-www-form-urlencoded path.
-export async function api(path: string, { method = 'GET', token = null, form = null, json = null }: ApiOptions & { json?: unknown } = {}): Promise<ApiResult> {
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+/**
+ * Calls one POS endpoint on the given tenant host with the shared bearer token.
+ * Never throws: network failures come back as `{ ok: false, networkError }`.
+ */
+export async function posApi<T = unknown>(tenant: Tenant, path: string, options: PosOptions = {}): Promise<ApiResult<T>> {
+    const { method = 'GET', query = {}, json, log } = options;
+    const url = tenant.host + withQuery(BASE + path, query);
 
-    let body: string | URLSearchParams | undefined;
-    if (json !== null && json !== undefined) {
-        headers['Content-Type'] = 'application/json';
-        body = JSON.stringify(json);
-    } else if (form) {
-        body = new URLSearchParams(form);
+    const headers: Record<string, string> = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${config.posToken}`,
+    };
+    if (json) headers['Content-Type'] = 'application/json';
+
+    const started = performance.now();
+    let result: ApiResult<T>;
+
+    try {
+        const response = await fetch(url, { method, headers, body: json ? JSON.stringify(json) : undefined });
+        const payload: ApiPayload<T> = await response.json().catch(() => ({}));
+        result = { status: response.status, ok: response.ok && payload.success === true, payload, ms: Math.round(performance.now() - started) };
+    } catch (error) {
+        result = {
+            status: 0,
+            ok: false,
+            payload: {},
+            ms: Math.round(performance.now() - started),
+            networkError: `Could not reach ${tenant.host} (${error instanceof Error ? error.message : 'network error'}).`,
+        };
     }
 
-    const response = await fetch(`${HOST}${path}`, { method, headers, body });
-    const payload: ApiPayload = await response.json().catch(() => ({}));
+    if (log) {
+        addHistory({
+            tenant: tenant.key,
+            kind: log.kind,
+            summary: log.summary,
+            ok: result.ok,
+            status: result.status,
+            ms: result.ms,
+            // The token is never stored; only the endpoint and body.
+            request: { method, path: BASE + path, query, body: json ?? null },
+            response: result.networkError ? { error: result.networkError } : result.payload,
+            meta: log.meta,
+        });
+    }
 
-    return { status: response.status, ok: payload.success === true, payload };
+    return result;
 }

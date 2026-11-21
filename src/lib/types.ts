@@ -1,158 +1,108 @@
-export type Variables = Record<string, number>;
+// Response shapes of the bim-lpms POS API (app/Http/Controllers/Api/V1/Pos/PosController.php
+// and Staff/QrController.php). Every response is wrapped in the ApiResponse envelope.
 
-export type DepartmentFormula = {
-    department: string;
-    formula: string;
-    variables: Variables;
-};
-
-/** A department row as held in React state: same shape plus a stable key. */
-export type FormulaRowState = DepartmentFormula & {
-    id: string;
-    /** Variables are kept as raw strings while editing so a half-typed value isn't coerced. */
-    varRows: VariableRowState[];
-    /** Created in-app via "+ Add department": the formula and the variable names are fixed. */
-    locked?: boolean;
-};
-
-export type VariableRowState = { id: string; name: string; value: string };
-
-export type ApiPayload = {
+export type ApiPayload<T = unknown> = {
     success?: boolean;
     message?: string;
     error_code?: string;
     errors?: Record<string, string[]>;
-    data?: any;
+    data?: T;
 };
 
-export type ApiResult = { status: number; ok: boolean; payload: ApiPayload };
-
-// ---------------------------------------------------------------------------
-// Audit & activity log feeds (staff plane). All four endpoints paginate the
-// same way, so they share one meta shape.
-// ---------------------------------------------------------------------------
-
-export type PageMeta = {
-    current_page: number;
-    per_page: number;
-    total: number;
-    last_page: number;
-    from: number | null;
-    to: number | null;
+export type ApiResult<T = unknown> = {
+    status: number;
+    ok: boolean;
+    payload: ApiPayload<T>;
+    /** Round-trip time in milliseconds. */
+    ms: number;
+    /** Set when fetch itself failed (offline, DNS, CORS). */
+    networkError?: string;
 };
 
-/** Whatever the audit feeds put in old_values / new_values / metadata. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-
-/** GET /api/v1/staff/reports/system-audit-log */
-export type SystemAuditRow = {
-    /** A row number across the whole result set, not a primary key — never a React key. */
-    id: number | null;
-    uuid: string;
-    date_time: string;
-    plgh_code: string | null;
-    customer_name: string | null;
-    customer_uuid: string | null;
-    action: string;
-    action_label: string;
-    old_values: JsonValue;
-    new_values: JsonValue;
-    performed_by: string | null;
-    reference_type: string | null;
-    reference_id: string | number | null;
-    ip_address: string | null;
-    metadata: JsonValue;
+export type HealthResult = {
+    status: string;
+    checked_at: string;
 };
 
-/** GET /api/v1/staff/customers/{uuid}/timeline — audits + activity_log, merged. */
-export type TimelineRow = {
-    /** The source table's PK, so ids collide across kinds: key on `${kind}-${id}`. */
-    id: number;
-    kind: 'change' | 'action';
-    at: string;
-    event: string | null;
-    /** Present on kind: 'change' only. */
-    subject_type?: string | null;
-    /** Present on kind: 'action' only. */
-    log_name?: string | null;
-    old: JsonValue;
-    new: JsonValue;
-    actor_name: string | null;
-    actor_role: string | null;
-    actor_source: string | null;
-    reason: string | null;
+export type CustomerTier = {
+    name_en: string;
+    name_my: string;
+    min_points: number;
+    max_points: number;
+    points_multiplier: number;
 };
 
-/** GET /api/v1/staff/customers/{uuid}/audit-logs */
-export type CustomerAuditRow = {
-    uuid: string;
-    action: string;
-    old_values: JsonValue;
-    new_values: JsonValue;
-    performed_id: number | null;
-    performed_name: string | null;
-    reference_type: string | null;
-    reference_id: string | number | null;
-    ip_address: string | null;
-    metadata: JsonValue;
-    created_at: string;
-};
-
-/** GET /api/v1/staff/logs — tier and setting field changes. */
-export type ChangeLogRow = {
-    /** Row number again, and this feed has nothing else stable — key on the composite. */
-    id: number | null;
-    date_time: string;
-    source: string;
-    subject: string;
-    subject_id: number | null;
-    field: string | null;
-    /** Strings here, unlike the object old/new of the other feeds — JSON-encoded when structured. */
-    from: string | null;
-    to: string | null;
-    actor_name: string | null;
-    actor_email: string | null;
-    actor_phone: string | null;
-    actor_role: string | null;
-    actor_source: string | null;
-    reason: string | null;
-};
-
-/** One hit from GET /api/v1/staff/customers?member_code=… */
-export type CustomerHit = {
-    uuid: string;
+export type CustomerLookup = {
     member_code: string;
     name: string;
+    father_name: string | null;
+    email: string | null;
     phone: string | null;
+    date_of_birth: string | null;
+    gender: string | null;
+    points_balance: number;
+    registered_at: string | null;
+    tier: CustomerTier | null;
+    point_decrease_formular: string;
+    point_increase_formular: string;
 };
 
-// ---------------------------------------------------------------------------
-// POS bill cancel — POST /api/v1/public/pos/bill/cancel
-// ---------------------------------------------------------------------------
+export type PointTransaction = {
+    uuid: string;
+    type: string;
+    status?: string;
+    points: number;
+    point_earn: number;
+    point_deducted: number;
+    amount_mmk: number | null;
+    balance_after: number;
+    description_en?: string | null;
+    description_my?: string | null;
+    location_id?: number | null;
+    reference_type?: string | null;
+    reference_id?: string | null;
+    expires_at?: string | null;
+    created_at?: string | null;
+};
 
-/**
- * One reversed leg. `refund` takes back points an earn awarded; `recharge` gives back
- * points a redeem spent. `reference_type` is the *original* leg's source.
- */
+export type ProcessPointsResult = {
+    transaction: PointTransaction;
+    points_balance: number;
+};
+
 export type BillReversal = {
-    reversal_type: 'refund' | 'recharge';
-    reference_type: 'pos_earn' | 'invoice_bid' | 'pos_redeem' | 'point_payment';
-    original_type: 'earn' | 'redeem';
+    reversal_type: 'refund' | 'recharge' | string;
+    reference_type: string;
+    original_type: 'earn' | 'redeem' | string;
     points_reversed: number;
     points_balance_after: number;
-    reversed_at: string;
+    reversed_at: string | null;
 };
 
-/** `reversals` holds 1 or 2 entries, recharge first. */
 export type BillCancelResult = {
     bill_id: string;
     redemption_id: string | null;
-    customer_name: string;
-    cancelled_at: string;
+    customer_name: string | null;
+    cancelled_at: string | null;
     points_balance_after: number;
-    /** Signed: negative when points were taken back, positive when given back. */
     net_points_change: number;
-    /** Tier slug, or null when the reversal did not move the customer's tier. */
     tier_changed_to: string | null;
     reversals: BillReversal[];
+};
+
+export type RedemptionCallbackResult = {
+    redemption_uuid: string;
+    kind?: string;
+    status?: string;
+    points_spent?: number;
+    points_balance_after?: number;
+    reward_name_en?: string;
+    reward_name_my?: string;
+    discount?: number | string;
+    stock_remaining?: number | null;
+    validated_at?: string | null;
+    customer_name?: string | null;
+    callback_state?: string;
+    callback_attempts?: number;
+    callback_failed_attempts?: number;
 };

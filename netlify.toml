@@ -3,12 +3,8 @@
   publish = "dist"
   environment = { NODE_VERSION = "26" }
 
-# Proxy /api requests to the backend so CORS isn't needed.
-# Requests to /api/… get forwarded to https://pinlon-lpms.bimats.com/api/… with headers intact.
-[[redirects]]
-  from = "/api/*"
-  to = "https://pinlon-lpms.bimats.com/api/:splat"
-  status = 200
-  force = true
-
-# SPA fallback not needed: the app uses HashRouter, so deep links resolve client-side.
+# The app uses HashRouter, so deep links resolve client-side and no SPA fallback is needed.
+# The POS API is called directly on each tenant host (CORS allows any origin), so there is no proxy.
+#
+# SECURITY: every VITE_* value, including the admin password and POS token, is compiled into
+# the JS bundle. Protect the deployed site with Netlify password protection or an IP allowlist.
