@@ -12,6 +12,7 @@ import { isToday, KIND_LABEL, useHistory } from '@/lib/history';
 const ACTIONS = [
     { to: '/invoice', label: 'Print invoice QR', icon: 'preview', tone: 'bg-sun' },
     { to: '/onboarding', label: 'Onboarding QR', icon: 'staff', tone: 'bg-lav' },
+    { to: '/mobile', label: 'Customer QR', icon: 'sparkles', tone: 'bg-lav' },
     { to: '/terminal/lookup', label: 'Scan customer', icon: 'staff', tone: 'bg-mint' },
     { to: '/terminal/points', label: 'Earn / Redeem', icon: 'earn', tone: 'bg-mint' },
     { to: '/terminal/bill-cancel', label: 'Cancel a bill', icon: 'error', tone: 'bg-pink' },
@@ -32,7 +33,7 @@ export function OverviewPage() {
                 <Stat label="Earns" value={count(['earn'])} tone="mint" />
                 <Stat label="Redeems" value={count(['redeem', 'claim', 'reward-apply'])} tone="sun" />
                 <Stat label="Bill cancels" value={count(['bill-cancel'])} tone="pink" />
-                <Stat label="QRs generated" value={count(['qr-invoice', 'qr-onboarding', 'qr-link'])} tone="lav" />
+                <Stat label="QRs generated" value={count(['qr-invoice', 'qr-onboarding', 'qr-link', 'qr-posscan'])} tone="lav" />
             </div>
 
             <ClayCard title="POS connection" icon="sparkles" tone="lav" delay={0.05}>

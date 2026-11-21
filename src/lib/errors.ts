@@ -24,19 +24,42 @@ export const ERROR_HINTS: Record<string, string> = {
     BILL_CANCEL_FAILED: 'The server could not cancel the bill. Nothing was changed. Try again.',
     POINT_PAYMENT_DEDUCT_FAILED: 'The point payment could not be deducted. Check the callback state below.',
     REWARD_DISCOUNT_FAILED: 'The reward discount could not be applied. Check the callback state below.',
+    OTP_COOLDOWN: 'A code was sent recently. Wait for the cooldown, then resend.',
+    INVALID_OTP: 'That code is wrong or expired. Check it, or request a new one.',
+    ACCOUNT_DELETED: 'This customer account has been deleted.',
+    ACCOUNT_SUSPENDED: 'This customer account is suspended. Ask hospital staff to review it.',
+    ACCOUNT_UNDERAGE: 'This customer is under the age limit and can only use the app through a linked family account.',
 };
+
+/** Hints that differ for customer (mobile app) calls. */
+const CUSTOMER_HINTS: Record<string, string> = {
+    NOT_FOUND: 'This phone number is not registered. Onboard the customer first (Onboarding QR), then sign in.',
+    UNAUTHENTICATED: 'The customer session expired or was signed out. Sign in again.',
+    UNAUTHORIZED: 'The customer session expired or was signed out. Sign in again.',
+    RATE_LIMITED: 'Too many requests. Wait a minute and try again.',
+};
+
+export type HintScope = 'pos' | 'customer';
 
 /** One-line error message: Laravel field errors, else message, else error_code. */
 export function failText(result: ApiResult, fallback = 'Request failed.'): string {
     if (result.networkError) return result.networkError;
     const { payload } = result;
-    const fieldErrors = Object.values(payload.errors ?? {}).flat();
+    // Laravel field errors are string arrays; other entries (e.g. OTP_COOLDOWN's numeric
+    // `retry_after`) are metadata, not messages.
+    const fieldErrors = Object.values(payload.errors ?? {}).filter(Array.isArray).flat().filter((m) => typeof m === 'string');
     if (fieldErrors.length) return fieldErrors.join(' ');
     return payload.message || payload.error_code || `${fallback} (HTTP ${result.status})`;
 }
 
-export function hintFor(result: ApiResult): string | null {
+export function hintFor(result: ApiResult, scope: HintScope = 'pos'): string | null {
     const code = result.payload.error_code;
+    if (scope === 'customer') {
+        if (code && CUSTOMER_HINTS[code]) return CUSTOMER_HINTS[code];
+        if (result.status === 401) return CUSTOMER_HINTS.UNAUTHENTICATED;
+        if (result.status === 404) return CUSTOMER_HINTS.NOT_FOUND;
+        if (result.status === 429 && !code) return CUSTOMER_HINTS.RATE_LIMITED;
+    }
     if (code && ERROR_HINTS[code]) return ERROR_HINTS[code];
     if (result.status === 401) return ERROR_HINTS.UNAUTHENTICATED;
     if (result.status === 429) return ERROR_HINTS.RATE_LIMITED;

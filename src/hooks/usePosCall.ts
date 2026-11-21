@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { failText, hintFor } from '@/lib/errors';
+import { failText, hintFor, type HintScope } from '@/lib/errors';
 import type { ApiResult } from '@/lib/types';
 import { useStatus } from './useStatus';
 
@@ -7,7 +7,7 @@ import { useStatus } from './useStatus';
  * Runs one POS request and turns its outcome into a status message (error text + hint).
  * Returns the last successful data so the page can render a result panel.
  */
-export function usePosCall<T>() {
+export function usePosCall<T>(scope: HintScope = 'pos') {
     const { status, say, clear } = useStatus();
     const [busy, setBusy] = useState(false);
     const [data, setData] = useState<T | null>(null);
@@ -27,11 +27,11 @@ export function usePosCall<T>() {
             } else {
                 setData(null);
                 const code = result.payload.error_code;
-                say(failText(result), 'error', [code ? `Code: ${code}` : '', hintFor(result) ?? '']);
+                say(failText(result), 'error', [code ? `Code: ${code}` : '', hintFor(result, scope) ?? '']);
             }
             return result;
         },
-        [say],
+        [say, scope],
     );
 
     const reset = useCallback(() => {

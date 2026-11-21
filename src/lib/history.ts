@@ -14,7 +14,10 @@ export type HistoryKind =
     | 'reward-apply'
     | 'qr-onboarding'
     | 'qr-link'
-    | 'qr-invoice';
+    | 'qr-invoice'
+    | 'otp-request'
+    | 'otp-verify'
+    | 'qr-posscan';
 
 export type HistoryEntry = {
     id: string;
@@ -42,6 +45,9 @@ export const KIND_LABEL: Record<HistoryKind, string> = {
     'qr-onboarding': 'Onboarding QR',
     'qr-link': 'Family link QR',
     'qr-invoice': 'Invoice QR',
+    'otp-request': 'OTP request',
+    'otp-verify': 'OTP sign-in',
+    'qr-posscan': 'Customer POS QR',
 };
 
 const KEY = 'history';

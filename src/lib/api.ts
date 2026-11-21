@@ -3,28 +3,50 @@ import { addHistory, type HistoryKind } from './history';
 import { withQuery, type QueryParams } from './query';
 import type { ApiPayload, ApiResult } from './types';
 
-const BASE = '/api/v1/public/pos';
+const POS_BASE = '/api/v1/public/pos';
+const CUSTOMER_BASE = '/api/v1/customer';
 
-type PosOptions = {
+/** Body fields that must never reach history (OTP codes). Tokens are never in the body at all. */
+const MASKED_FIELDS = ['code'];
+
+type LogOptions = { kind: HistoryKind; summary: string; meta?: Record<string, string> };
+
+type RequestOptions = {
     method?: 'GET' | 'POST';
     query?: QueryParams;
     json?: Record<string, unknown>;
+    /** Bearer token for this call. Never written to history. */
+    token?: string | null;
     /** When set, the call is written to activity history. */
-    log?: { kind: HistoryKind; summary: string; meta?: Record<string, string> };
+    log?: LogOptions;
 };
 
+function maskBody(body: Record<string, unknown> | undefined): Record<string, unknown> | null {
+    if (!body) return null;
+    const out: Record<string, unknown> = { ...body };
+    for (const field of MASKED_FIELDS) if (field in out) out[field] = '••••••';
+    return out;
+}
+
+/** Strips secrets (access tokens) out of a response before it is stored in history. */
+function maskResponse(payload: ApiPayload<unknown>): unknown {
+    const data = payload.data;
+    if (data && typeof data === 'object' && 'access_token' in (data as Record<string, unknown>)) {
+        return { ...payload, data: { ...(data as Record<string, unknown>), access_token: '••••••' } };
+    }
+    return payload;
+}
+
 /**
- * Calls one POS endpoint on the given tenant host with the shared bearer token.
+ * Shared fetch for every bim-lpms call: timing, envelope parsing and history.
  * Never throws: network failures come back as `{ ok: false, networkError }`.
  */
-export async function posApi<T = unknown>(tenant: Tenant, path: string, options: PosOptions = {}): Promise<ApiResult<T>> {
-    const { method = 'GET', query = {}, json, log } = options;
-    const url = tenant.host + withQuery(BASE + path, query);
+async function request<T>(tenant: Tenant, base: string, path: string, options: RequestOptions): Promise<ApiResult<T>> {
+    const { method = 'GET', query = {}, json, token, log } = options;
+    const url = tenant.host + withQuery(base + path, query);
 
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        Authorization: `Bearer ${config.posToken}`,
-    };
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
     if (json) headers['Content-Type'] = 'application/json';
 
     const started = performance.now();
@@ -52,12 +74,23 @@ export async function posApi<T = unknown>(tenant: Tenant, path: string, options:
             ok: result.ok,
             status: result.status,
             ms: result.ms,
-            // The token is never stored; only the endpoint and body.
-            request: { method, path: BASE + path, query, body: json ?? null },
-            response: result.networkError ? { error: result.networkError } : result.payload,
+            request: { method, path: base + path, query, body: maskBody(json) },
+            response: result.networkError ? { error: result.networkError } : maskResponse(result.payload),
             meta: log.meta,
         });
     }
 
     return result;
+}
+
+type PosOptions = Omit<RequestOptions, 'token'>;
+
+/** Calls one POS endpoint on the tenant host with the shared POS bearer token. */
+export function posApi<T = unknown>(tenant: Tenant, path: string, options: PosOptions = {}): Promise<ApiResult<T>> {
+    return request<T>(tenant, POS_BASE, path, { ...options, token: config.posToken });
+}
+
+/** Calls one customer (mobile app) endpoint on the tenant host, optionally as a signed-in customer. */
+export function customerApi<T = unknown>(tenant: Tenant, path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
+    return request<T>(tenant, CUSTOMER_BASE, path, options);
 }

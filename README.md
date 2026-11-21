@@ -25,6 +25,11 @@ It covers only what the other Pinlon UIs don't:
 - **Invoice QR**: `PID,BID,Department,Amount,Date`, where a blank department becomes `Null` and the date is formatted `DD MON YYYY`.
   - Warns about the minimum amount and when the bill isn't dated today.
   - Prints an 80mm receipt, and supports batch labels.
+- **Customer app (Mobile)**: acts as the customer's Pinlon app, for producing a POS scan QR.
+  - Sign in with a mobile number (`09…` is sent as `+959…`) and a 6-digit OTP: `POST /api/v1/customer/otp/request` and `/otp/verify`.
+  - Generate the 5-minute, single-use POS QR (`POST /api/v1/customer/pos-scan`) with a live countdown, and hand it to Lookup / Earn / Redeem in one click.
+  - This signs in as a **real customer**, so use test accounts on UAT. Hospitals in test OTP mode accept `000000`.
+  - The customer token is kept per hospital in `sessionStorage` and cleared on dashboard sign-out. OTP codes and tokens are never written to history.
 - **POS terminal**:
   - **Customer lookup** (`GET /customers/lookup`): camera, upload or USB scanner input, plus a points preview.
   - **Earn / Redeem** (`POST /points/process`): uses a reference as the idempotency key.

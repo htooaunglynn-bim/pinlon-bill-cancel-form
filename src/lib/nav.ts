@@ -11,6 +11,10 @@ export const NAV: NavGroup[] = [
         ],
     },
     {
+        label: 'Mobile',
+        items: [{ to: '/mobile', label: 'Customer app', icon: 'sparkles' }],
+    },
+    {
         label: 'POS terminal',
         items: [
             { to: '/terminal/lookup', label: 'Customer lookup', icon: 'staff' },
