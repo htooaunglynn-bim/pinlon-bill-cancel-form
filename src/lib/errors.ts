@@ -28,6 +28,11 @@ export const ERROR_HINTS: Record<string, string> = {
     INVALID_OTP: 'That code is wrong or expired. Check it, or request a new one.',
     ACCOUNT_DELETED: 'This customer account has been deleted.',
     ACCOUNT_SUSPENDED: 'This customer account is suspended. Ask hospital staff to review it.',
+    REWARD_UNAVAILABLE: 'This reward is not published or no longer available.',
+    OUT_OF_STOCK: 'This reward is out of stock.',
+    TIER_INELIGIBLE: 'The customer\'s tier is not eligible for this reward.',
+    BABY_INELIGIBLE: 'This reward is only for families with a baby member.',
+    REWARD_REDEMPTION_EXPIRED: 'This reward QR expired (48 hours). Redeem the reward again for a new QR.',
     ACCOUNT_UNDERAGE: 'This customer is under the age limit and can only use the app through a linked family account.',
 };
 

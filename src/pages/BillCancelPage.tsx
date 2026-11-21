@@ -1,13 +1,15 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ClayButton } from '@/components/ClayButton';
 import { ClayCard } from '@/components/ClayCard';
 import { ClayField } from '@/components/ClayField';
 import { ClayInput } from '@/components/ClayInput';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { CustomerBillsCard } from '@/components/CustomerBillsCard';
 import { StatusMessage } from '@/components/StatusMessage';
 import { ClayTextarea, FieldError, JsonBlock, KeyValue, PageHeader, Stat } from '@/components/ui';
 import { useTenant } from '@/context/TenantContext';
+import { useCustomerBills, type CustomerBill } from '@/hooks/useCustomerBills';
 import { usePosCall } from '@/hooks/usePosCall';
 import { posApi } from '@/lib/api';
 import { formatPoints, whenText } from '@/lib/dates';
@@ -26,6 +28,32 @@ export function BillCancelPage() {
     const [confirming, setConfirming] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const call = usePosCall<BillCancelResult>();
+    const customerBills = useCustomerBills();
+    const [autoNote, setAutoNote] = useState<string | null>(null);
+
+    // Fill Bill ID from the signed-in customer's only cancellable earn today, unless a link
+    // already supplied one. Once per page visit; the user can still change it.
+    const autoFilled = useRef(Boolean(params.get('bill') || params.get('redemption')));
+    useEffect(() => {
+        if (autoFilled.current || customerBills.loading) return;
+        const open = customerBills.bills.filter((b) => b.kind === 'earn' && !b.cancelled && !b.unclaimed);
+        if (open.length !== 1 || billId.trim()) return;
+        autoFilled.current = true;
+        setBillId(open[0].billId);
+        setAutoNote(`Filled from ${customerBills.session?.profile.name ?? 'the customer'}'s bill today.`);
+    }, [customerBills.bills, customerBills.loading]);
+
+    function selectBill(b: CustomerBill) {
+        setAutoNote(null);
+        call.reset();
+        if (b.kind === 'earn') {
+            setBillId(b.billId);
+        } else {
+            setRedemptionId(b.billId);
+            // Bill ID is required by the API; a redeem-only cancel repeats the reference there.
+            if (!billId.trim()) setBillId(b.billId);
+        }
+    }
 
     const errors = {
         billId: !billId.trim() ? 'Bill ID is required.' : billId.length > 100 ? 'At most 100 characters.' : undefined,
@@ -53,6 +81,8 @@ export function BillCancelPage() {
             }),
             (d) => `Bill cancelled. Net change ${d.net_points_change > 0 ? '+' : ''}${formatPoints(d.net_points_change)} points.`,
         );
+        // Show the row as cancelled.
+        void customerBills.refresh();
         if (!result.ok && result.payload.error_code === 'BILL_ALREADY_CANCELLED') {
             call.say('Already cancelled. Nothing more to do.', 'success', ['A repeat cancel is safe; the bill was voided earlier.']);
         }
@@ -63,6 +93,17 @@ export function BillCancelPage() {
     return (
         <div className="space-y-7">
             <PageHeader title="Bill cancel" subtitle="Void a bill's points: refund an earn, recharge a redeem, or both at once. Same day only." />
+
+            <CustomerBillsCard
+                session={customerBills.session}
+                bills={customerBills.bills}
+                loading={customerBills.loading}
+                error={customerBills.error}
+                onRefresh={() => void customerBills.refresh()}
+                onSelect={selectBill}
+                billId={billId}
+                redemptionId={redemptionId}
+            />
 
             <ClayCard
                 title="Cancel a bill"
@@ -78,8 +119,9 @@ export function BillCancelPage() {
             >
                 <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2" noValidate>
                     <ClayField label="Bill ID" htmlFor="bill">
-                        <ClayInput id="bill" mono value={billId} onChange={(e) => setBillId(e.target.value)} placeholder="BILL-20261121-ABC123" aria-invalid={!!show('billId')} />
+                        <ClayInput id="bill" mono value={billId} onChange={(e) => { setBillId(e.target.value); setAutoNote(null); }} placeholder="BILL-20261121-ABC123" aria-invalid={!!show('billId')} />
                         <FieldError>{show('billId')}</FieldError>
+                        {autoNote ? <p className="mt-1.5 text-sm text-mint-deep">✓ {autoNote}</p> : null}
                     </ClayField>
                     <ClayField label="Redemption ID" hint="(optional)" htmlFor="redemption">
                         <ClayInput id="redemption" mono value={redemptionId} onChange={(e) => setRedemptionId(e.target.value)} aria-invalid={!!show('redemptionId')} />

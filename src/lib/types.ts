@@ -136,3 +136,52 @@ export type PosScanQrResult = {
     token: string;
     expires_at: string | null;
 };
+
+/** Subset of PointTransactionResource returned by GET /api/v1/customer/points/history. */
+export type CustomerTransaction = {
+    uuid: string;
+    type: string;
+    points: number | string;
+    reference_id: string | null;
+    amount_mmk?: number | string | null;
+    description_en?: string | null;
+    created_at: string | null;
+};
+
+/** RewardResource from GET /api/v1/customer/rewards. */
+export type Reward = {
+    id: number;
+    reward_id?: string | null;
+    name_en: string;
+    name_my?: string | null;
+    description_en?: string | null;
+    points_required: number;
+    category?: { name_en?: string; name?: string } | null;
+    image_url?: string | null;
+    tiers?: { name_en?: string }[];
+    stock_quantity: number | null;
+    valid_from?: string | null;
+    valid_until?: string | null;
+    redemption_instructions_en?: string | null;
+    terms_and_conditions_en?: string | null;
+    is_baby?: boolean;
+};
+
+/** RedemptionResource from POST /rewards/{id}/redeem and GET /rewards/{uuid}/status. */
+export type RewardRedemption = {
+    uuid: string;
+    reward?: Reward;
+    kind?: string | null;
+    points_spent: number;
+    qr_code?: string | null;
+    qr_expires_at: string | null;
+    status: 'pending' | 'validated' | 'expired' | 'cancelled' | string;
+    validated_at?: string | null;
+    created_at?: string | null;
+};
+
+export type RewardQrResult = {
+    qr_image: string;
+    qr_string: string | null;
+    qr_expires_at: string | null;
+};

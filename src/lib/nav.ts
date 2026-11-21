@@ -12,7 +12,10 @@ export const NAV: NavGroup[] = [
     },
     {
         label: 'Mobile',
-        items: [{ to: '/mobile', label: 'Customer app', icon: 'sparkles' }],
+        items: [
+            { to: '/mobile', label: 'Customer app', icon: 'sparkles' },
+            { to: '/mobile/rewards', label: 'Rewards', icon: 'coin' },
+        ],
     },
     {
         label: 'POS terminal',

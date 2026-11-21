@@ -13,6 +13,13 @@ export function yangonToday(): string {
     return parts; // en-CA formats as YYYY-MM-DD
 }
 
+/** Calendar date (YYYY-MM-DD) of an ISO timestamp in Asia/Yangon. */
+export function yangonDateOf(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
 /** YYYY-MM-DD → "14 JUL 2026", the format POS bill QRs print. */
 export function toQrDate(iso: string): string {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);

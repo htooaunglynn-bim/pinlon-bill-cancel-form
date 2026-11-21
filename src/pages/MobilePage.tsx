@@ -327,6 +327,9 @@ function QrStep({ onSignedOut }: { onSignedOut: () => void }) {
                 >
                     Sign out customer
                 </ClayButton>
+                <Link to="/mobile/rewards" className="clay-pressable ml-3 inline-block rounded-blob bg-sun px-4 py-2 font-display text-sm font-semibold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-lav-deep">
+                    Rewards →
+                </Link>
             </ClayCard>
 
             <ClayCard

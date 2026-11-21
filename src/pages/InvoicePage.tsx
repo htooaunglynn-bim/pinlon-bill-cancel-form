@@ -8,6 +8,7 @@ import { ClayInput } from '@/components/ClayInput';
 import { QrLabelSheet } from '@/components/QrLabelSheet';
 import { QrImage, QrPreview } from '@/components/QrPreview';
 import { ClayTextarea, Divider, FieldError, FieldWarning, PageHeader, Segmented } from '@/components/ui';
+import { useCustomerSession } from '@/context/CustomerSessionContext';
 import { useTenant } from '@/context/TenantContext';
 import { useRecordQr } from '@/hooks/useRecordQr';
 import { formatMmk, toQrDate } from '@/lib/dates';
@@ -25,7 +26,11 @@ export function InvoicePage() {
     const { tenant } = useTenant();
     const record = useRecordQr();
     const [tab, setTab] = useState<'single' | 'batch'>('single');
-    const [form, setForm] = useState<InvoiceInput>(emptyInvoice);
+    const { session: customer } = useCustomerSession();
+    // Invoice PIDs are member codes: default a new bill to the customer signed in on Customer app.
+    const customerPid = customer?.profile.member_code?.toUpperCase() ?? '';
+    const freshInvoice = () => ({ ...emptyInvoice(), pid: customerPid });
+    const [form, setForm] = useState<InvoiceInput>(freshInvoice);
     const [touched, setTouched] = useState<Partial<Record<InvoiceField, boolean>>>({});
     const [batchText, setBatchText] = useState('');
     const [printTarget, setPrintTarget] = useState<'receipt' | 'batch'>('receipt');
@@ -74,6 +79,16 @@ export function InvoicePage() {
                                 <ClayField label="PID" hint="patient ID" htmlFor="pid">
                                     <ClayInput id="pid" mono value={form.pid} onChange={(e) => set('pid', e.target.value.toUpperCase())} placeholder="P-10001" aria-invalid={!!show('pid')} aria-describedby="pid-err" />
                                     <FieldError id="pid-err">{show('pid')}</FieldError>
+                                    {customerPid && form.pid.trim().toUpperCase() === customerPid ? (
+                                        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-clay-muted">
+                                            <span>PID of signed-in customer <strong className="text-clay-ink">{customer?.profile.name}</strong></span>
+                                            <button type="button" onClick={() => set('pid', '')} className="cursor-pointer font-semibold text-lav-deep underline focus-visible:outline-3 focus-visible:outline-lav-deep">Clear</button>
+                                        </p>
+                                    ) : customerPid && !form.pid.trim() ? (
+                                        <button type="button" onClick={() => set('pid', customerPid)} className="mt-1.5 cursor-pointer text-sm font-semibold text-lav-deep underline focus-visible:outline-3 focus-visible:outline-lav-deep">
+                                            Use {customer?.profile.name}'s PID ({customerPid})
+                                        </button>
+                                    ) : null}
                                 </ClayField>
                                 <ClayField label="Bill ID (BID)" hint="must be unique" htmlFor="bid">
                                     <div className="flex gap-2">
@@ -99,7 +114,7 @@ export function InvoicePage() {
                             </form>
                             <Divider />
                             <div className="flex flex-wrap gap-3">
-                                <ClayButton tone="ghost" compact type="button" onClick={() => { setForm(emptyInvoice()); setTouched({}); }}>New bill</ClayButton>
+                                <ClayButton tone="ghost" compact type="button" onClick={() => { setForm(freshInvoice()); setTouched({}); }}>New bill</ClayButton>
                                 {qr ? (
                                     <Link
                                         to={`/terminal/bill-cancel?bill=${encodeURIComponent(form.bid)}`}

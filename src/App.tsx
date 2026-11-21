@@ -11,6 +11,7 @@ import { InvoicePage } from '@/pages/InvoicePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { LookupPage } from '@/pages/LookupPage';
 import { MobilePage } from '@/pages/MobilePage';
+import { RewardsPage } from '@/pages/RewardsPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { PointsPage } from '@/pages/PointsPage';
@@ -32,6 +33,7 @@ export default function App() {
                                 <Route path="onboarding" element={<OnboardingPage />} />
                                 <Route path="invoice" element={<InvoicePage />} />
                                 <Route path="mobile" element={<MobilePage />} />
+                                <Route path="mobile/rewards" element={<RewardsPage />} />
                                 <Route path="terminal/lookup" element={<LookupPage />} />
                                 <Route path="terminal/points" element={<PointsPage />} />
                                 <Route path="terminal/bill-cancel" element={<BillCancelPage />} />

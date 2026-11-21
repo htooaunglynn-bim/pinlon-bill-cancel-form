@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ClayButton } from '@/components/ClayButton';
 import { ClayCard } from '@/components/ClayCard';
 import { ClayChip } from '@/components/ClayChip';
@@ -29,7 +30,10 @@ const STATE_TEXT: Record<string, string> = {
 export function RedemptionsPage() {
     const { tenant } = useTenant();
     const prefs = usePrefs();
-    const [qr, setQr] = useState('');
+    const [params] = useSearchParams();
+    // Prefilled when coming from the Rewards page ("Use at POS").
+    const [qr, setQr] = useState(params.get('qr') ?? '');
+    const fromRewards = params.get('from') === 'rewards';
     const [kindOverride, setKindOverride] = useState<Kind>('REWARD');
     const [locationId, setLocationId] = useState(prefs.defaultLocationId);
     const [pending, setPending] = useState<boolean | null>(null);
@@ -114,6 +118,11 @@ export function RedemptionsPage() {
                     </div>
                 </div>
                 <StatusMessage status={call.status} />
+                {fromRewards && call.data ? (
+                    <p className="mt-3 text-sm">
+                        <Link to="/mobile/rewards" className="font-semibold text-lav-deep underline">← Back to the customer's rewards</Link>
+                    </p>
+                ) : null}
             </ClayCard>
 
             {d ? (
