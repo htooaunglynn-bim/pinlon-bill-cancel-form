@@ -20,7 +20,7 @@ const ACTIONS = [
 ];
 
 export function OverviewPage() {
-    const { tenants, tenant, setTenantKey, health, checkHealth } = useTenant();
+    const { tenants, tenant, health, checkHealth } = useTenant();
     const history = useHistory();
     const today = history.filter((h) => isToday(h.at) && h.tenant === tenant.key);
     const count = (kinds: string[]) => today.filter((h) => kinds.includes(h.kind) && h.ok).length;
@@ -46,9 +46,9 @@ export function OverviewPage() {
                                 <div className="flex items-center gap-2.5">
                                     <HealthDot health={h} />
                                     <p className="flex-1 font-display font-semibold">{t.name}</p>
-                                    {active ? <ClayChip>selected</ClayChip> : null}
+                                    {active ? <ClayChip>signed in</ClayChip> : null}
                                 </div>
-                                <p className="mt-1 truncate font-mono text-xs text-clay-muted">{t.host}</p>
+                                <p className="mt-1 truncate font-mono text-xs text-clay-muted">{t.host}/api/v1/public/{t.slug}</p>
                                 <p className="mt-1 text-sm text-clay-muted">
                                     {h?.state === 'ok'
                                         ? `Token valid · ${h.ms} ms · ${whenText(h.checkedAt)}`
@@ -60,9 +60,6 @@ export function OverviewPage() {
                                 </p>
                                 <div className="mt-3 flex gap-2">
                                     <ClayButton tone="ghost" compact type="button" onClick={() => void checkHealth(t, true)}>Check</ClayButton>
-                                    {!active ? (
-                                        <ClayButton tone="ghost" compact type="button" onClick={() => setTenantKey(t.key)}>Select</ClayButton>
-                                    ) : null}
                                 </div>
                             </li>
                         );

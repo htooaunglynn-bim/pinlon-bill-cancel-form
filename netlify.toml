@@ -6,5 +6,5 @@
 # The app uses HashRouter, so deep links resolve client-side and no SPA fallback is needed.
 # The POS API is called directly on each tenant host (CORS allows any origin), so there is no proxy.
 #
-# SECURITY: every VITE_* value, including the admin password and POS token, is compiled into
-# the JS bundle. Protect the deployed site with Netlify password protection or an IP allowlist.
+# Sign-in is tenant ID + slug + token typed by the operator; no secret is compiled into the bundle.
+# Only the tenant host list (VITE_POS_TENANTS / VITE_TENANT_HOST_TEMPLATE) is build-time config.

@@ -1,9 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { config, type Tenant } from '@/config/env';
+import type { Tenant } from '@/config/env';
 import { useAuth } from '@/context/AuthContext';
 import { posApi } from '@/lib/api';
 import { failText } from '@/lib/errors';
-import { readLocal, writeLocal } from '@/lib/storage';
 import type { HealthResult } from '@/lib/types';
 
 export type Health = {
@@ -17,29 +16,21 @@ export type Health = {
 type TenantValue = {
     tenants: Tenant[];
     tenant: Tenant;
-    setTenantKey: (key: string) => void;
     health: Record<string, Health>;
     checkHealth: (tenant?: Tenant, logIt?: boolean) => Promise<void>;
 };
 
 const TenantContext = createContext<TenantValue | null>(null);
 const POLL_MS = 60_000;
+const SIGNED_OUT: Tenant = { key: '', name: '', host: '', slug: '', token: '' };
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-    const tenants = config.tenants;
-    const [key, setKey] = useState<string>(() => {
-        const saved = readLocal<string | null>('tenant', null);
-        return tenants.some((t) => t.key === saved) ? (saved as string) : config.defaultTenant;
-    });
-    const tenant = tenants.find((t) => t.key === key) ?? tenants[0];
+    const { user, tenant: signedIn } = useAuth();
+    // Signed out there is no tenant; the placeholder keeps hooks simple and is never called with.
+    const tenant = signedIn ?? SIGNED_OUT;
+    const tenants = useMemo(() => (signedIn ? [signedIn] : []), [signedIn]);
     const [health, setHealth] = useState<Record<string, Health>>({});
     const busy = useRef(new Set<string>());
-    const { user } = useAuth();
-
-    const setTenantKey = useCallback((next: string) => {
-        setKey(next);
-        writeLocal('tenant', next);
-    }, []);
 
     const checkHealth = useCallback(async (target?: Tenant, logIt = false) => {
         const t = target ?? tenant;
@@ -59,13 +50,13 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
     // Check the selected tenant when it changes, then poll every minute.
     useEffect(() => {
-        if (!user) return;
+        if (!user || !tenant.token) return;
         void checkHealth(tenant);
         const timer = window.setInterval(() => void checkHealth(tenant), POLL_MS);
         return () => window.clearInterval(timer);
     }, [tenant.key, user]);
 
-    const value = useMemo(() => ({ tenants, tenant, setTenantKey, health, checkHealth }), [tenants, tenant, setTenantKey, health, checkHealth]);
+    const value = useMemo(() => ({ tenants, tenant, health, checkHealth }), [tenants, tenant, health, checkHealth]);
 
     return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;
 }

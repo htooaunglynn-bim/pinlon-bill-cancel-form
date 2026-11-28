@@ -1,9 +1,8 @@
-import { config, type Tenant } from '@/config/env';
+import type { Tenant } from '@/config/env';
 import { addHistory, type HistoryKind } from './history';
 import { withQuery, type QueryParams } from './query';
 import type { ApiPayload, ApiResult } from './types';
 
-const POS_BASE = '/api/v1/public/pos';
 const CUSTOMER_BASE = '/api/v1/customer';
 
 /** Body fields that must never reach history (OTP codes). Tokens are never in the body at all. */
@@ -85,9 +84,9 @@ async function request<T>(tenant: Tenant, base: string, path: string, options: R
 
 type PosOptions = Omit<RequestOptions, 'token'>;
 
-/** Calls one POS endpoint on the tenant host with the shared POS bearer token. */
+/** Calls one POS endpoint at /api/v1/public/{slug} on the tenant host with that tenant's LPMS token. */
 export function posApi<T = unknown>(tenant: Tenant, path: string, options: PosOptions = {}): Promise<ApiResult<T>> {
-    return request<T>(tenant, POS_BASE, path, { ...options, token: config.posToken });
+    return request<T>(tenant, `/api/v1/public/${encodeURIComponent(tenant.slug)}`, path, { ...options, token: tenant.token });
 }
 
 /** Calls one customer (mobile app) endpoint on the tenant host, optionally as a signed-in customer. */

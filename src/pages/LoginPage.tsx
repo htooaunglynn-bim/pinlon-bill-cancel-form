@@ -15,22 +15,32 @@ export function LoginPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const { status, say } = useStatus();
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
+    const [tenantId, setTenantId] = useState('');
+    const [slug, setSlug] = useState('');
+    const [token, setToken] = useState('');
     const [show, setShow] = useState(false);
+    const [busy, setBusy] = useState(false);
 
     const from = (location.state as { from?: string } | null)?.from ?? '/';
     if (user) return <Navigate to={from} replace />;
 
-    function submit(e: FormEvent) {
+    async function submit(e: FormEvent) {
         e.preventDefault();
-        const result = login(username, password);
+        if (busy) return;
+        // The button stays enabled so an empty submit explains itself instead of doing nothing.
+        if (!tenantId.trim() || !slug.trim() || !token.trim()) {
+            say(!tenantId.trim() ? 'Enter the tenant ID.' : !slug.trim() ? 'Enter the slug.' : 'Enter the token.', 'error');
+            return;
+        }
+        setBusy(true);
+        const result = await login(tenantId, slug, token);
+        setBusy(false);
         if (result.ok) {
             navigate(from, { replace: true });
             return;
         }
         say(result.error, 'error', result.retryInSeconds ? [`Try again in ${result.retryInSeconds} seconds.`] : []);
-        setPassword('');
+        setToken('');
     }
 
     return (
@@ -49,17 +59,21 @@ export function LoginPage() {
 
                 <ClayCard title="Sign in" icon="staff" tone="lav">
                     <form onSubmit={submit} className="space-y-5" noValidate>
-                        <ClayField label="Username" htmlFor="username">
-                            <ClayInput id="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
+                        <ClayField label="Tenant ID" htmlFor="tenant-id">
+                            <ClayInput id="tenant-id" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="pinlon" value={tenantId} onChange={(e) => setTenantId(e.target.value)} required autoFocus />
                         </ClayField>
-                        <ClayField label="Password" htmlFor="password">
+                        <ClayField label="Slug" htmlFor="slug">
+                            <ClayInput id="slug" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="pos" value={slug} onChange={(e) => setSlug(e.target.value)} required />
+                        </ClayField>
+                        <ClayField label="Token" htmlFor="token">
                             <div className="relative">
                                 <ClayInput
-                                    id="password"
+                                    id="token"
                                     type={show ? 'text' : 'password'}
-                                    autoComplete="current-password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    value={token}
+                                    onChange={(e) => setToken(e.target.value)}
                                     required
                                     className="pr-20"
                                 />
@@ -67,19 +81,19 @@ export function LoginPage() {
                                     type="button"
                                     onClick={() => setShow((s) => !s)}
                                     className="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-lg px-2 py-1 font-display text-sm font-semibold text-lav-deep focus-visible:outline-3 focus-visible:outline-lav-deep"
-                                    aria-label={show ? 'Hide password' : 'Show password'}
+                                    aria-label={show ? 'Hide token' : 'Show token'}
                                 >
                                     {show ? 'Hide' : 'Show'}
                                 </button>
                             </div>
                         </ClayField>
-                        <ClayButton type="submit" disabled={!username || !password}>Sign in</ClayButton>
+                        <ClayButton type="submit" disabled={busy}>{busy ? 'Checking…' : 'Sign in'}</ClayButton>
                     </form>
                     <StatusMessage status={status} />
                 </ClayCard>
 
                 <p className="mt-6 text-center text-xs text-clay-muted">
-                    Internal tool. Credentials come from the dashboard's environment configuration.
+                    Internal tool. The slug and token for each tenant are managed in the central dashboard (Tenants → LPMS integration).
                 </p>
             </div>
         </>

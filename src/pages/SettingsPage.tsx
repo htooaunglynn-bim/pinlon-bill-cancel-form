@@ -20,7 +20,7 @@ const DOCS = [
 
 export function SettingsPage() {
     const prefs = usePrefs();
-    const { tenants, health } = useTenant();
+    const { tenants, tenant, health } = useTenant();
     const [draft, setDraft] = useState<Prefs>(prefs);
     const { status, say } = useStatus();
 
@@ -80,14 +80,14 @@ export function SettingsPage() {
                 icon="sparkles"
                 tone="sun"
                 delay={0.05}
-                intro={<p>Read-only. Set in <code>.env.local</code> (or the hosting provider's build variables) and rebuild to change.</p>}
+                intro={<p>Read-only. This session's tenant, slug and token come from the sign-in; they are managed in the central dashboard.</p>}
             >
                 <KeyValue
                     rows={[
-                        ['Admin user', config.adminUsername],
-                        ['POS token', <code key="t">{maskToken(config.posToken)}</code>],
+                        ['Tenant ID', tenant.key],
+                        ['Slug', <code key="s">{tenant.slug}</code>],
+                        ['Token', <code key="t">{maskToken(tenant.token)}</code>],
                         ['Session length', `${config.sessionHours} hours`],
-                        ['Default hospital', config.defaultTenant],
                     ]}
                 />
                 <ul className="mt-5 space-y-2">
@@ -102,8 +102,8 @@ export function SettingsPage() {
                 <div className="clay-inset mt-5 rounded-blob bg-pink/20 px-4 py-3 text-sm">
                     <p className="font-semibold text-pink-deep">Security note</p>
                     <p className="mt-1 text-clay-ink">
-                        The admin password and POS token are compiled into this site's JavaScript. Anyone who can load the site can read them. Keep it behind
-                        hosting-level access control (e.g. Netlify password protection) and rotate the POS token if the site is ever exposed.
+                        The token you signed in with is held in this tab's session storage only and is cleared on sign-out. Rotate it in the central dashboard
+                        (Tenants → LPMS integration) if it is ever exposed.
                     </p>
                 </div>
             </ClayCard>
@@ -111,8 +111,8 @@ export function SettingsPage() {
             <ClayCard title="API reference" icon="preview" tone="mint" delay={0.1}>
                 <KeyValue
                     rows={[
-                        ['Base path', <code key="b">/api/v1/public/pos</code>],
-                        ['Auth', <code key="a">Authorization: Bearer &lt;POS token&gt;</code>],
+                        ['Base path', <code key="b">/api/v1/public/{tenant.slug}</code>],
+                        ['Auth', <code key="a">Authorization: Bearer &lt;tenant LPMS token&gt;</code>],
                         ['Rate limit', '120 requests/min for lookup, process and cancel. Shared by every caller using the token.'],
                         ['Time zone', 'Asia/Yangon. Bills can only be claimed or cancelled on the same day.'],
                     ]}

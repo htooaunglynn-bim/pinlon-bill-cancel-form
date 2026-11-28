@@ -2,7 +2,7 @@ import type { ApiResult } from './types';
 
 /** Plain-language hints for every POS error_code the backend can return. */
 export const ERROR_HINTS: Record<string, string> = {
-    UNAUTHENTICATED: 'The POS token was rejected. Check VITE_POS_TOKEN matches POS_POINT_PAYMENT_TOKEN on the server.',
+    UNAUTHENTICATED: 'The POS token was rejected. Sign out and check the token for this tenant in the central dashboard (Tenants → LPMS integration).',
     POS_POINT_PAYMENT_TOKEN_MISSING: 'The server has no POS_POINT_PAYMENT_TOKEN configured. Ask a backend admin to set it.',
     RATE_LIMITED: 'Too many POS calls. The limit is 120 per minute, shared by everyone using this token. Wait a minute and retry.',
     TENANT_SUSPENDED: 'This hospital is suspended. POS calls are blocked until a central admin reactivates it.',

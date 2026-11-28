@@ -72,8 +72,8 @@ function SessionPanel() {
         <div className="border-t-2 border-dashed border-clay-edge pt-4">
             <p className="mb-2 font-display text-xs font-semibold tracking-wide text-clay-muted uppercase">Session</p>
             <div className="clay-inset rounded-blob bg-cream px-3.5 py-2.5 text-sm">
-                <p className="font-semibold">{user}</p>
-                <p className="truncate text-xs text-clay-muted">{tenant.name}</p>
+                <p className="font-semibold">{tenant.name}</p>
+                <p className="truncate text-xs text-clay-muted">{user} · /{tenant.slug}</p>
                 {expiresAt ? (
                     <p className="text-xs text-clay-muted">Until {new Date(expiresAt).toLocaleTimeString(undefined, { timeStyle: 'short' })}</p>
                 ) : null}

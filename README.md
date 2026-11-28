@@ -9,16 +9,13 @@ It covers only what the other Pinlon UIs don't:
 | Bill-cancel **report** | `dashboard/` → Transaction → Billing Cancellation |
 | Branch (location) CRUD, QR scan log, POS integration guide | `loyalty-central-dashboard/` |
 
-> [!WARNING]
-> **Secrets are compiled into the bundle.** Vite inlines every `VITE_*` value, including the admin password and the shared POS token, into the public JavaScript, so anyone who can load the site can read them.
-> - Deploy only behind hosting-level access control, such as Netlify password protection or an IP allowlist.
-> - Prefer UAT credentials.
-> - Rotate `POS_POINT_PAYMENT_TOKEN` if the site is ever exposed.
+> [!NOTE]
+> **No secrets are built into the bundle.** You sign in with a **tenant ID**, the tenant's **slug** and its **LPMS token** (for Pinlon: `pinlon`, `pos`, `lpms_…`). The central dashboard (`loyalty-central-dashboard`, Tenants → LPMS integration) controls each tenant's slug and token; bim-lpms checks them on every call. The token is kept in `sessionStorage` for the session only.
 
 ## Features
 
-- **Sign-in**: username and password from env, with a session that expires after `VITE_SESSION_HOURS` and a cooldown after 5 failed attempts.
-- **Hospital switcher**: the tenants come from `VITE_POS_TENANTS`, and each one gets a live `/health` check every minute.
+- **Sign-in**: tenant ID + slug + token, verified against `GET /api/v1/public/{slug}/health`. The session expires after `VITE_SESSION_HOURS`, with a cooldown after 5 failed attempts. Sign out to switch hospital.
+- **Health**: the signed-in tenant gets a live `/health` check every minute.
 - **Onboarding QR**: `PID,Name,FatherName,DOB,Phone,Gender,Baby` for new members, or the 6–7 field family-link variant.
   - The validation mirrors `CreateOnboardingQrStringRequest` and `CreateLinkQrStringRequest`.
   - Single or batch mode (CSV), with PNG/SVG download and an A4 label sheet.
@@ -51,10 +48,8 @@ npm run dev
 
 | Variable | Required | Notes |
 |---|---|---|
-| `VITE_ADMIN_USERNAME` / `VITE_ADMIN_PASSWORD` | yes | Dashboard sign-in |
-| `VITE_POS_TOKEN` | yes | Same value as `POS_POINT_PAYMENT_TOKEN` in bim-lpms |
-| `VITE_POS_TENANTS` | yes | JSON array, e.g. `[{"key":"pinlon","name":"Pinlon","host":"https://pinlon-lpms.bimats.com"}]` |
-| `VITE_DEFAULT_TENANT` | no | Tenant key; defaults to the first one |
+| `VITE_POS_TENANTS` | one of the two | JSON array mapping tenant ID to API host, e.g. `[{"key":"pinlon","name":"Pinlon","host":"https://pinlon-lpms.bimats.com"}]` |
+| `VITE_TENANT_HOST_TEMPLATE` | one of the two | Host pattern for any tenant ID, e.g. `https://{id}-lpms.bimats.com` |
 | `VITE_SESSION_HOURS` | no | Default 8 |
 
 If a required value is missing, the app shows a "Configuration missing" screen listing what's wrong.

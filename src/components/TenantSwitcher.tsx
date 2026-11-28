@@ -1,5 +1,4 @@
 import { useTenant, type Health } from '@/context/TenantContext';
-import { ClaySelect } from './ClaySelect';
 
 const DOT: Record<Health['state'], string> = {
     unknown: 'bg-clay-muted/50',
@@ -11,7 +10,7 @@ const DOT: Record<Health['state'], string> = {
 const LABEL: Record<Health['state'], string> = {
     unknown: 'Not checked',
     checking: 'Checking…',
-    ok: 'POS token OK',
+    ok: 'Token OK',
     error: 'Unreachable',
 };
 
@@ -21,7 +20,7 @@ export function HealthDot({ health }: { health?: Health }) {
 }
 
 export function TenantSwitcher() {
-    const { tenants, tenant, setTenantKey, health, checkHealth } = useTenant();
+    const { tenant, health, checkHealth } = useTenant();
     const h = health[tenant.key];
 
     return (
@@ -29,19 +28,11 @@ export function TenantSwitcher() {
             <label htmlFor="tenant" className="mb-2 block px-1 font-display text-xs font-semibold tracking-wide text-clay-muted uppercase">
                 Hospital
             </label>
-            {tenants.length > 1 ? (
-                <ClaySelect id="tenant" value={tenant.key} onChange={(e) => setTenantKey(e.target.value)} className="!py-2.5 text-sm font-semibold">
-                    {tenants.map((t) => (
-                        <option key={t.key} value={t.key}>{t.name}</option>
-                    ))}
-                </ClaySelect>
-            ) : (
-                <p id="tenant" className="clay-inset rounded-blob bg-cream px-4 py-2.5 text-sm font-semibold">{tenant.name}</p>
-            )}
+            <p id="tenant" className="clay-inset rounded-blob bg-cream px-4 py-2.5 text-sm font-semibold">{tenant.name}</p>
             <button
                 type="button"
                 onClick={() => void checkHealth(tenant, true)}
-                title={h?.message ?? 'Re-check POS token'}
+                title={h?.message ?? 'Re-check tenant token'}
                 className="mt-2 flex w-full cursor-pointer items-center gap-2 rounded-blob px-1 text-left text-xs text-clay-muted hover:text-clay-ink focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-lav-deep"
             >
                 <HealthDot health={h} />

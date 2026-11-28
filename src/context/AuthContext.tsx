@@ -1,19 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { config } from '@/config/env';
+import { config, resolveTenantHost, type Tenant } from '@/config/env';
+import { posApi } from '@/lib/api';
+import { failText } from '@/lib/errors';
 import { readSession, writeSession } from '@/lib/storage';
 
-// Sign-in checks against VITE_ADMIN_USERNAME / VITE_ADMIN_PASSWORD. Those values ship in the
-// bundle, so this is a convenience gate for an internal tool, not real security. The README
-// says to protect the deployed site at the hosting layer.
+// Sign-in is a tenant id + POS path slug + LPMS token, issued per tenant in the central dashboard.
+// The credentials are verified against the tenant's own /health endpoint, so a wrong id, slug or
+// token is rejected by bim-lpms itself. The session (token included) lives in sessionStorage only.
 
-type Session = { user: string; expiresAt: number };
+type Session = { tenant: Tenant; expiresAt: number };
 
 type LoginResult = { ok: true } | { ok: false; error: string; retryInSeconds?: number };
 
 type AuthValue = {
+    /** Signed-in tenant id, or null when signed out. */
     user: string | null;
+    tenant: Tenant | null;
     expiresAt: number | null;
-    login: (username: string, password: string) => LoginResult;
+    login: (tenantId: string, slug: string, token: string) => Promise<LoginResult>;
     logout: () => void;
 };
 
@@ -24,14 +28,7 @@ const COOLDOWN_MS = 30_000;
 
 function loadSession(): Session | null {
     const s = readSession<Session | null>('auth', null);
-    return s && s.expiresAt > Date.now() ? s : null;
-}
-
-/** Constant-time-ish comparison so the check doesn't short-circuit on the first wrong char. */
-function same(a: string, b: string): boolean {
-    let diff = a.length ^ b.length;
-    for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-    return diff === 0;
+    return s && s.tenant?.token && s.expiresAt > Date.now() ? s : null;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -52,34 +49,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [session, logout]);
 
     const login = useCallback(
-        (username: string, password: string): LoginResult => {
+        async (tenantId: string, slug: string, token: string): Promise<LoginResult> => {
             const now = Date.now();
             if (lockedUntil > now) {
                 return { ok: false, error: 'Too many attempts.', retryInSeconds: Math.ceil((lockedUntil - now) / 1000) };
             }
 
-            if (same(username.trim(), config.adminUsername) && same(password, config.adminPassword)) {
-                const next = { user: config.adminUsername, expiresAt: now + config.sessionHours * 3_600_000 };
-                writeSession('auth', next);
-                setSession(next);
-                setFailures(0);
-                return { ok: true };
+            const id = tenantId.trim().toLowerCase();
+            const cleanSlug = slug.trim().replace(/^\/+|\/+$/g, '');
+            const cleanToken = token.trim();
+
+            const fail = (error: string): LoginResult => {
+                const count = failures + 1;
+                if (count >= MAX_ATTEMPTS) {
+                    setFailures(0);
+                    setLockedUntil(Date.now() + COOLDOWN_MS);
+                    return { ok: false, error: 'Too many attempts.', retryInSeconds: COOLDOWN_MS / 1000 };
+                }
+                setFailures(count);
+                return { ok: false, error: `${error} ${MAX_ATTEMPTS - count} attempt(s) left.` };
+            };
+
+            const resolved = resolveTenantHost(id);
+            if (!resolved) return fail(`Unknown tenant id "${id}".`);
+
+            const tenant: Tenant = { key: id, name: resolved.name, host: resolved.host, slug: cleanSlug, token: cleanToken };
+            const result = await posApi(tenant, '/health');
+            if (!result.ok) {
+                if (result.networkError) return { ok: false, error: result.networkError };
+                if (result.status === 404) return fail('Wrong slug for this tenant.');
+                if (result.status === 401 || result.status === 403) return fail('The token was rejected.');
+                return { ok: false, error: failText(result, 'Sign-in check failed.') };
             }
 
-            const count = failures + 1;
-            if (count >= MAX_ATTEMPTS) {
-                setFailures(0);
-                setLockedUntil(now + COOLDOWN_MS);
-                return { ok: false, error: 'Too many attempts.', retryInSeconds: COOLDOWN_MS / 1000 };
-            }
-            setFailures(count);
-            return { ok: false, error: `Wrong username or password. ${MAX_ATTEMPTS - count} attempt(s) left.` };
+            const next: Session = { tenant, expiresAt: Date.now() + config.sessionHours * 3_600_000 };
+            writeSession('auth', next);
+            setSession(next);
+            setFailures(0);
+            return { ok: true };
         },
         [failures, lockedUntil],
     );
 
     const value = useMemo<AuthValue>(
-        () => ({ user: session?.user ?? null, expiresAt: session?.expiresAt ?? null, login, logout }),
+        () => ({ user: session?.tenant.key ?? null, tenant: session?.tenant ?? null, expiresAt: session?.expiresAt ?? null, login, logout }),
         [session, login, logout],
     );
 

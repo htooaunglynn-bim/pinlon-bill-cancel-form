@@ -1,6 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useCountdown } from '@/hooks/useCountdown';
-import { config } from '@/config/env';
 import { useAuth } from '@/context/AuthContext';
 import { useTenant } from '@/context/TenantContext';
 import { customerApi } from '@/lib/api';
@@ -52,16 +51,18 @@ function loadActiveQr(tenantKey: string): ActiveQr | null {
 }
 
 /** Forget every hospital's customer session (used on dashboard sign-out). */
-export function clearAllCustomerSessions() {
-    config.tenants.forEach((t) => {
-        writeSession(key(t.key), null);
-        writeSession(qrKey(t.key), null);
-    });
+export function clearAllCustomerSessions(tenantKey?: string) {
+    if (!tenantKey) return;
+    writeSession(key(tenantKey), null);
+    writeSession(qrKey(tenantKey), null);
 }
 
 export function CustomerSessionProvider({ children }: { children: ReactNode }) {
     const { tenant } = useTenant();
     const { user } = useAuth();
+    // Sign-out empties `tenant`, so remember which one to wipe.
+    const lastTenant = useRef('');
+    if (tenant.key) lastTenant.current = tenant.key;
     const [session, setState] = useState<CustomerSession | null>(() => readSession<CustomerSession | null>(key(tenant.key), null));
     const [activeQr, setActiveQrState] = useState<ActiveQr | null>(() => loadActiveQr(tenant.key));
 
@@ -74,7 +75,7 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
     // Dashboard sign-out wipes customer sessions too.
     useEffect(() => {
         if (!user) {
-            clearAllCustomerSessions();
+            clearAllCustomerSessions(lastTenant.current);
             setState(null);
             setActiveQrState(null);
         }
